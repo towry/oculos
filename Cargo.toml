@@ -5,7 +5,7 @@ edition = "2021"
 authors = ["OculOS Contributors"]
 description = "If it's on the screen, it's an API. Universal UI automation layer for any application."
 license = "MIT"
-repository = "https://github.com/oculos-project/oculos"
+repository = "https://github.com/huseyinstif/oculos"
 keywords = ["ui-automation", "accessibility", "api", "automation", "gui"]
 categories = ["gui", "api-bindings", "development-tools"]
 

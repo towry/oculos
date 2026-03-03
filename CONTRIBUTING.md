@@ -5,7 +5,7 @@ Thanks for your interest in OculOS! Here's how to get started.
 ## Development Setup
 
 ```bash
-git clone https://github.com/stifhq/oculos.git
+git clone https://github.com/huseyinstif/oculos.git
 cd oculos
 cargo build --release
 ```
