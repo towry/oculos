@@ -1,63 +1,162 @@
-# OculOS
+<p align="center">
+  <img src="static/logo.svg" width="100" alt="OculOS" />
+</p>
 
-> **"If it's on the screen, it's an API."**
+<h1 align="center">OculOS</h1>
 
-OculOS exposes any desktop application's UI as a REST API and MCP server. Built with Rust, powered by native OS accessibility APIs.
+<p align="center">
+  <strong>If it's on the screen, it's an API.</strong><br/>
+  <sub>Control any desktop app through JSON. REST API + MCP server. Single binary. Zero dependencies.</sub>
+</p>
 
-No screenshots. No pixel coordinates. No browser extensions. Just JSON.
+<p align="center">
+  <a href="#quick-start">Quick Start</a> •
+  <a href="#how-it-works">How It Works</a> •
+  <a href="#api">API</a> •
+  <a href="#mcp-setup">MCP Setup</a> •
+  <a href="#dashboard">Dashboard</a> •
+  <a href="./AGENTS.md">Agent Prompt</a> •
+  <a href="./CONTRIBUTING.md">Contributing</a>
+</p>
+
+<p align="center">
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="MIT License" /></a>
+  <a href="https://github.com/stifhq/oculos/stargazers"><img src="https://img.shields.io/github/stars/stifhq/oculos?style=social" alt="GitHub Stars" /></a>
+  <img src="https://img.shields.io/badge/built_with-Rust-dea584.svg" alt="Built with Rust" />
+  <img src="https://img.shields.io/badge/platform-Windows%20%7C%20Linux%20%7C%20macOS-informational" alt="Platforms" />
+</p>
+
+---
+
+OculOS is a lightweight daemon that reads the OS accessibility tree and exposes every button, text field, checkbox, and menu item as a JSON endpoint. It works as a **REST API** for scripts and as an **MCP server** for AI agents — Claude, GPT, Gemini, or your own model.
+
+No screenshots. No pixel coordinates. No browser extensions. No code injection. Just structured JSON.
+
+---
+
+## Highlights
+
+- 🔍 **Accessibility-first** — reads the native OS UI tree (Windows UIA, Linux AT-SPI2, macOS AX). Deterministic, instant, zero GPU cost.
+- 🌐 **REST API** — discover windows, search elements, click/type/toggle/scroll. Any language, any HTTP client.
+- 🤖 **MCP server** — plug directly into Claude, Cursor, Windsurf, or any MCP-compatible agent. Full tool schemas included.
+- 🖥️ **Web dashboard** — built-in UI at `localhost:7878` with element inspector, tree search, automation recorder, and live WebSocket events.
+- ⚡ **Single binary** — Rust-native, ~3 MB, no runtime dependencies. Build once, run everywhere.
+- 🔒 **100% local** — your data never leaves your machine. No cloud, no telemetry, no API keys required.
+- 🎯 **Element highlighting** — native overlay to visually mark any element on screen via API.
+- 🎬 **Automation recorder** — record interactions in the dashboard, export as Python / JavaScript / curl.
+
+---
 
 ## Quick Start
 
 ```bash
+git clone https://github.com/stifhq/oculos.git
+cd oculos
 cargo build --release
-./target/release/oculos            # HTTP API + Dashboard → http://127.0.0.1:7878
-./target/release/oculos --mcp      # MCP server over stdio
 ```
+
+### HTTP mode (API + Dashboard)
+
+```bash
+./target/release/oculos
+# API       → http://127.0.0.1:7878
+# Dashboard → http://127.0.0.1:7878
+```
+
+### MCP mode (for AI agents)
+
+```bash
+./target/release/oculos --mcp
+```
+
+---
 
 ## How It Works
 
-OculOS reads the OS accessibility tree (Windows UIA, macOS AX, Linux AT-SPI2) and assigns each UI element a temporary `oculos_id`. Use that ID to interact:
+OculOS reads the OS accessibility tree and assigns each UI element a session-scoped UUID (`oculos_id`). You use that ID to interact.
 
 ```bash
-# List windows
+# 1. List open windows
 curl http://localhost:7878/windows
 
-# Get UI tree
-curl http://localhost:7878/windows/1234/tree
+# 2. Get the UI tree for a window
+curl http://localhost:7878/windows/{pid}/tree
 
-# Click a button
+# 3. Find a specific element
+curl "http://localhost:7878/windows/{pid}/find?q=Submit&type=Button"
+
+# 4. Click it
 curl -X POST http://localhost:7878/interact/{id}/click
 
-# Type into a field
-curl -X POST http://localhost:7878/interact/{id}/set-text -d '{"text":"hello"}'
+# 5. Type into a text field
+curl -X POST http://localhost:7878/interact/{id}/set-text \
+  -H "Content-Type: application/json" \
+  -d '{"text":"hello world"}'
 ```
+
+Every element includes an `actions` array — the API tells you exactly what you can do:
+
+```json
+{
+  "oculos_id": "a3f8c2d1-...",
+  "type": "Button",
+  "label": "Submit",
+  "enabled": true,
+  "actions": ["click", "focus"],
+  "rect": { "x": 120, "y": 340, "width": 80, "height": 32 }
+}
+```
+
+---
 
 ## API
 
+### Discovery
+
 | Endpoint | Description |
 |----------|-------------|
-| `GET /windows` | List visible windows |
+| `GET /windows` | List all visible windows |
 | `GET /windows/{pid}/tree` | Full UI element tree |
-| `GET /windows/{pid}/find?q=&type=&interactive=true` | Search elements |
+| `GET /windows/{pid}/find?q=&type=&interactive=` | Search elements |
 | `GET /hwnd/{hwnd}/tree` | Tree by window handle |
-| `POST /windows/{pid}/focus` | Focus window |
-| `POST /windows/{pid}/close` | Close window |
-| `POST /interact/{id}/click` | Click element |
-| `POST /interact/{id}/set-text` | Set text `{"text":"..."}` |
-| `POST /interact/{id}/send-keys` | Send keys `{"keys":"{CTRL+A}hello{ENTER}"}` |
-| `POST /interact/{id}/toggle` | Toggle checkbox |
-| `POST /interact/{id}/expand` | Expand dropdown/tree |
-| `POST /interact/{id}/collapse` | Collapse dropdown/tree |
-| `POST /interact/{id}/select` | Select list item |
-| `POST /interact/{id}/set-range` | Set slider `{"value":75}` |
-| `POST /interact/{id}/scroll` | Scroll `{"direction":"down"}` |
-| `POST /interact/{id}/highlight` | Highlight element on screen |
-| `GET /ws` | WebSocket live events |
-| `GET /health` | Server status, uptime, version |
+| `GET /hwnd/{hwnd}/find` | Search by window handle |
+
+### Window operations
+
+| Endpoint | Description |
+|----------|-------------|
+| `POST /windows/{pid}/focus` | Bring to foreground |
+| `POST /windows/{pid}/close` | Close gracefully |
+
+### Element interactions
+
+| Endpoint | Body | Description |
+|----------|------|-------------|
+| `POST /interact/{id}/click` | — | Click |
+| `POST /interact/{id}/set-text` | `{"text":"…"}` | Replace text content |
+| `POST /interact/{id}/send-keys` | `{"keys":"…"}` | Keyboard input |
+| `POST /interact/{id}/focus` | — | Move focus |
+| `POST /interact/{id}/toggle` | — | Toggle checkbox |
+| `POST /interact/{id}/expand` | — | Expand dropdown / tree |
+| `POST /interact/{id}/collapse` | — | Collapse |
+| `POST /interact/{id}/select` | — | Select list item |
+| `POST /interact/{id}/set-range` | `{"value":N}` | Set slider value |
+| `POST /interact/{id}/scroll` | `{"direction":"…"}` | Scroll container |
+| `POST /interact/{id}/scroll-into-view` | — | Scroll into viewport |
+| `POST /interact/{id}/highlight` | `{"duration_ms":N}` | Highlight on screen |
+
+### System
+
+| Endpoint | Description |
+|----------|-------------|
+| `GET /health` | Status, version, uptime |
+| `GET /ws` | WebSocket (live action events) |
+
+---
 
 ## MCP Setup
 
-Add to your MCP client config (Claude, Cursor, Windsurf, etc.):
+Works with any MCP-compatible client. Add to your config:
 
 ```json
 {
@@ -70,27 +169,35 @@ Add to your MCP client config (Claude, Cursor, Windsurf, etc.):
 }
 ```
 
-For HTTP-mode agents, paste [`AGENTS.md`](./AGENTS.md) into the system prompt.
+**Tested with:** Claude Code, Claude Desktop, Cursor, Windsurf
+
+For non-MCP agents (OpenAI, Gemini, custom), paste [`AGENTS.md`](./AGENTS.md) into the system prompt and give the agent HTTP access.
+
+---
 
 ## Dashboard
 
-Built-in web dashboard at `http://127.0.0.1:7878` with:
+Built-in web UI at `http://127.0.0.1:7878`:
 
-- Window list with focus/close controls
-- Interactive UI element tree with search
-- Element inspector with all available actions
-- Automation recorder — record interactions, export as Python/JS/curl
-- JSON viewer with copy support
-- WebSocket live event indicator
-- Keyboard shortcuts: `R` refresh, `/` search, `E` expand, `C` collapse, `H` highlight
+- **Window list** — all open windows with focus/close buttons
+- **Element tree** — full interactive UI tree with search and filter
+- **Inspector** — element details, properties, and all available actions
+- **Recorder** — record a sequence of interactions, export as **Python**, **JavaScript**, or **curl**
+- **JSON viewer** — raw element data with copy
+- **WebSocket** — live event indicator, real-time action feed
+- **Shortcuts** — `R` refresh · `/` search · `E` expand · `C` collapse · `H` highlight · `J` JSON
+
+---
 
 ## Platform Support
 
 | Platform | Backend | Status |
 |----------|---------|--------|
-| Windows | UI Automation via `windows-rs` | ✅ Full |
-| Linux | AT-SPI2 via `atspi` + `zbus` | ✅ Working |
-| macOS | Accessibility API | 🚧 Planned |
+| **Windows** | UI Automation (`windows-rs`) | ✅ Full — Win32, WPF, Electron, Qt |
+| **Linux** | AT-SPI2 (`atspi` + `zbus`) | ✅ Working — GTK, Qt, Electron |
+| **macOS** | Accessibility API | 🚧 Planned |
+
+---
 
 ## CLI
 
@@ -98,19 +205,73 @@ Built-in web dashboard at `http://127.0.0.1:7878` with:
 oculos [OPTIONS]
 
   -b, --bind <ADDR>       Bind address [default: 127.0.0.1:7878]
-      --static-dir <DIR>  Dashboard files [default: static]
-      --log <LEVEL>       Log level [default: info]
-      --mcp               Run as MCP server over stdio
+      --static-dir <DIR>  Static files directory [default: static]
+      --log <LEVEL>       Log level: trace/debug/info/warn/error [default: info]
+      --mcp               Run as MCP server over stdin/stdout
+  -h, --help              Print help
 ```
+
+---
+
+## How OculOS Differs
+
+| | OculOS | Vision agents | Screen coordinate tools | Browser-only tools |
+|---|---|---|---|---|
+| **Approach** | OS accessibility tree | Screenshots + LLM | Pixel positions | DOM / a11y tree |
+| **Scope** | Any desktop app | Any (with latency) | Any (fragile) | Browser only |
+| **Speed** | Instant | Seconds | Instant | Instant |
+| **Deterministic** | ✅ | ❌ | ✅ | ✅ |
+| **GPU required** | ❌ | ✅ | ❌ | ❌ |
+| **Cloud required** | ❌ | Usually | ❌ | ❌ |
+| **Semantic** | ✅ Labels + types | Varies | ❌ Coordinates | ✅ |
+
+---
+
+## Everything Built So Far
+
+### Core
+- [x] Windows UIA backend (full — Win32, WPF, Electron, Qt)
+- [x] Linux AT-SPI2 backend
+- [x] REST API server (Axum)
+- [x] MCP server (JSON-RPC 2.0 over stdio)
+- [x] Session-scoped element registry with UUIDs
+- [x] Full keyboard simulation engine
+
+### Dashboard
+- [x] Window list with focus/close
+- [x] Interactive element tree with search/filter
+- [x] Element inspector with all actions
+- [x] API request log
+- [x] JSON viewer with copy
+- [x] Keyboard shortcuts
+
+### Advanced
+- [x] Element highlighting (native GDI overlay)
+- [x] Automation recorder (record + export Python/JS/curl)
+- [x] WebSocket live events
+- [x] Health endpoint (uptime, version, platform)
+
+### Planned
+- [ ] macOS backend (`AXUIElement`)
+- [ ] Python & TypeScript client SDKs
+- [ ] Batch operations (multiple interactions per request)
+- [ ] Conditional waits (wait for element to appear)
+- [ ] Element caching & diffing (change detection)
+- [ ] Docker image for CI/CD
+
+---
 
 ## Contributing
 
-PRs welcome. Main areas:
+We welcome contributions! See [CONTRIBUTING.md](./CONTRIBUTING.md) for details.
 
+**Top areas:**
 - **macOS backend** — `AXUIElement` implementation
-- **Client SDKs** — Python, TypeScript
+- **Client SDKs** — Python, TypeScript wrappers
 - **Tests** — cross-app integration tests
+
+---
 
 ## License
 
-MIT
+[MIT](./LICENSE)
