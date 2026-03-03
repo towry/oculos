@@ -1,0 +1,78 @@
+[package]
+name = "oculos"
+version = "0.1.0"
+edition = "2021"
+authors = ["OculOS Contributors"]
+description = "If it's on the screen, it's an API. Universal UI automation layer for any application."
+license = "MIT"
+repository = "https://github.com/oculos-project/oculos"
+keywords = ["ui-automation", "accessibility", "api", "automation", "gui"]
+categories = ["gui", "api-bindings", "development-tools"]
+
+[features]
+default = []
+
+[[bin]]
+name = "oculos"
+path = "src/main.rs"
+
+[dependencies]
+# Async runtime
+tokio = { version = "1", features = ["full"] }
+
+# Web framework
+axum = { version = "0.7", features = ["ws", "multipart"] }
+tower = "0.4"
+tower-http = { version = "0.5", features = ["cors", "fs", "trace"] }
+
+# Serialization
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+# Logging
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+# Error handling
+anyhow = "1"
+thiserror = "1"
+
+# Unique IDs for UI elements
+uuid = { version = "1", features = ["v4"] }
+
+# Async channels & state
+tokio-stream = "0.1"
+dashmap = "5"
+
+# CLI args
+clap = { version = "4", features = ["derive"] }
+
+# HTTP client (for dashboard live reload dev)
+reqwest = { version = "0.11", features = ["json"], optional = true }
+
+[target.'cfg(target_os = "windows")'.dependencies]
+windows = { version = "0.58", features = [
+    "Win32_Foundation",
+    "Win32_System_Com",
+    "Win32_UI_Accessibility",
+    "Win32_UI_WindowsAndMessaging",
+    "Win32_UI_Input_KeyboardAndMouse",
+    "Win32_System_Threading",
+    "Win32_Graphics_Gdi",
+] }
+
+[target.'cfg(target_os = "macos")'.dependencies]
+accessibility = "0.1"
+core-foundation = "0.9"
+core-graphics = "0.23"
+objc2 = "0.5"
+
+[target.'cfg(target_os = "linux")'.dependencies]
+atspi = { version = "0.19", features = ["async-std"] }
+zbus = "3"
+
+[profile.release]
+opt-level = 3
+lto = true
+codegen-units = 1
+strip = true

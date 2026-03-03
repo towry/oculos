@@ -1,0 +1,631 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>OculOS Dashboard</title>
+  <style>
+    :root {
+      --bg: #0d0f14;
+      --surface: #151820;
+      --surface2: #1c2030;
+      --border: #2a2f3e;
+      --accent: #6ee7f7;
+      --accent2: #a78bfa;
+      --text: #e2e8f0;
+      --text-dim: #64748b;
+      --green: #4ade80;
+      --red: #f87171;
+      --yellow: #fbbf24;
+      --font: 'JetBrains Mono', 'Fira Code', monospace;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: var(--font);
+      font-size: 13px;
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    /* ── Header ── */
+    header {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      padding: 10px 20px;
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      flex-shrink: 0;
+    }
+    .logo {
+      font-size: 18px;
+      font-weight: 700;
+      letter-spacing: 2px;
+      color: var(--accent);
+    }
+    .motto {
+      color: var(--text-dim);
+      font-size: 11px;
+      font-style: italic;
+    }
+    .badge {
+      margin-left: auto;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 11px;
+    }
+    .dot {
+      width: 8px; height: 8px;
+      border-radius: 50%;
+      background: var(--green);
+      animation: pulse 2s infinite;
+    }
+    @keyframes pulse {
+      0%,100% { opacity: 1; }
+      50% { opacity: 0.4; }
+    }
+
+    /* ── Main layout ── */
+    .workspace {
+      flex: 1;
+      display: grid;
+      grid-template-columns: 280px 1fr 360px;
+      overflow: hidden;
+    }
+
+    .panel {
+      display: flex;
+      flex-direction: column;
+      border-right: 1px solid var(--border);
+      overflow: hidden;
+    }
+    .panel:last-child { border-right: none; }
+
+    .panel-header {
+      padding: 8px 14px;
+      background: var(--surface2);
+      border-bottom: 1px solid var(--border);
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 1.5px;
+      color: var(--text-dim);
+      text-transform: uppercase;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-shrink: 0;
+    }
+
+    .panel-body {
+      flex: 1;
+      overflow-y: auto;
+      overflow-x: hidden;
+    }
+
+    /* Scrollbar */
+    ::-webkit-scrollbar { width: 5px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+
+    /* ── Windows list ── */
+    .window-item {
+      padding: 10px 14px;
+      border-bottom: 1px solid var(--border);
+      cursor: pointer;
+      transition: background 0.15s;
+    }
+    .window-item:hover { background: var(--surface2); }
+    .window-item.active { background: rgba(110,231,247,0.08); border-left: 3px solid var(--accent); }
+
+    .win-title {
+      color: var(--text);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      font-weight: 600;
+      font-size: 12px;
+    }
+    .win-meta {
+      display: flex;
+      gap: 8px;
+      margin-top: 4px;
+    }
+    .tag {
+      font-size: 10px;
+      padding: 1px 6px;
+      border-radius: 4px;
+      background: var(--surface2);
+      color: var(--text-dim);
+    }
+    .tag.pid { color: var(--accent); }
+    .tag.exe { color: var(--accent2); }
+
+    .refresh-btn {
+      background: none;
+      border: 1px solid var(--border);
+      color: var(--text-dim);
+      padding: 2px 8px;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 10px;
+      font-family: var(--font);
+      transition: all 0.15s;
+    }
+    .refresh-btn:hover { border-color: var(--accent); color: var(--accent); }
+
+    /* ── Tree view ── */
+    .tree-container { padding: 8px; }
+
+    .tree-node {
+      user-select: none;
+    }
+
+    .tree-row {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 3px 6px;
+      border-radius: 4px;
+      cursor: pointer;
+      transition: background 0.1s;
+    }
+    .tree-row:hover { background: var(--surface2); }
+    .tree-row.selected { background: rgba(167,139,250,0.15); }
+
+    .tree-toggle {
+      width: 14px;
+      text-align: center;
+      color: var(--text-dim);
+      font-size: 10px;
+      flex-shrink: 0;
+    }
+
+    .tree-type {
+      font-size: 10px;
+      padding: 1px 5px;
+      border-radius: 3px;
+      flex-shrink: 0;
+    }
+    .tree-label {
+      flex: 1;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      color: var(--text);
+      font-size: 12px;
+    }
+    .tree-children { padding-left: 16px; }
+
+    /* Element type colors */
+    .type-Button    { background: rgba(74,222,128,0.15); color: #4ade80; }
+    .type-Edit      { background: rgba(251,191,36,0.15); color: #fbbf24; }
+    .type-Text      { background: rgba(100,116,139,0.15); color: #94a3b8; }
+    .type-Window    { background: rgba(110,231,247,0.15); color: #6ee7f7; }
+    .type-Pane      { background: rgba(110,231,247,0.10); color: #67e8f9; }
+    .type-MenuItem  { background: rgba(167,139,250,0.15); color: #a78bfa; }
+    .type-default   { background: rgba(100,116,139,0.10); color: #64748b; }
+
+    /* ── Element detail panel ── */
+    .detail-grid {
+      padding: 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .detail-section {
+      background: var(--surface2);
+      border-radius: 6px;
+      padding: 10px 12px;
+    }
+    .detail-section h4 {
+      font-size: 10px;
+      color: var(--text-dim);
+      letter-spacing: 1px;
+      margin-bottom: 8px;
+      text-transform: uppercase;
+    }
+    .detail-row {
+      display: flex;
+      justify-content: space-between;
+      padding: 3px 0;
+      border-bottom: 1px solid var(--border);
+      font-size: 11px;
+    }
+    .detail-row:last-child { border-bottom: none; }
+    .detail-key { color: var(--text-dim); }
+    .detail-val { color: var(--text); font-weight: 600; max-width: 200px; text-align: right; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+    .action-btn {
+      width: 100%;
+      padding: 8px;
+      margin-top: 4px;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      color: var(--accent);
+      border-radius: 6px;
+      cursor: pointer;
+      font-family: var(--font);
+      font-size: 12px;
+      font-weight: 600;
+      transition: all 0.15s;
+    }
+    .action-btn:hover { background: rgba(110,231,247,0.1); border-color: var(--accent); }
+    .action-btn.danger { color: var(--red); }
+    .action-btn.danger:hover { background: rgba(248,113,113,0.1); border-color: var(--red); }
+
+    .text-input {
+      width: 100%;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      color: var(--text);
+      padding: 7px 10px;
+      border-radius: 5px;
+      font-family: var(--font);
+      font-size: 12px;
+      margin-top: 6px;
+    }
+    .text-input:focus { outline: none; border-color: var(--accent); }
+
+    /* ── Log panel (right) ── */
+    .log-entry {
+      padding: 6px 14px;
+      border-bottom: 1px solid rgba(42,47,62,0.5);
+      font-size: 11px;
+      display: flex;
+      gap: 10px;
+      align-items: flex-start;
+    }
+    .log-time { color: var(--text-dim); flex-shrink: 0; }
+    .log-method { flex-shrink: 0; font-weight: 700; }
+    .log-method.GET { color: var(--green); }
+    .log-method.POST { color: var(--yellow); }
+    .log-path { color: var(--text); flex: 1; }
+    .log-status { flex-shrink: 0; }
+    .log-status.ok { color: var(--green); }
+    .log-status.err { color: var(--red); }
+
+    .clear-btn {
+      background: none;
+      border: 1px solid var(--border);
+      color: var(--text-dim);
+      padding: 2px 8px;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 10px;
+      font-family: var(--font);
+    }
+    .clear-btn:hover { color: var(--red); border-color: var(--red); }
+
+    .empty-state {
+      padding: 40px 20px;
+      text-align: center;
+      color: var(--text-dim);
+      font-size: 12px;
+    }
+
+    /* ── Loading indicator ── */
+    .spinner {
+      display: inline-block;
+      width: 12px; height: 12px;
+      border: 2px solid var(--border);
+      border-top-color: var(--accent);
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+  </style>
+</head>
+<body>
+
+<header>
+  <span class="logo">OCULOS</span>
+  <span class="motto">"If it's on the screen, it's an API."</span>
+  <div class="badge">
+    <div class="dot" id="statusDot"></div>
+    <span id="statusText">Connecting…</span>
+  </div>
+</header>
+
+<div class="workspace">
+
+  <!-- ── Panel 1: Windows List ── -->
+  <div class="panel">
+    <div class="panel-header">
+      <span>Open Windows</span>
+      <button class="refresh-btn" onclick="loadWindows()">↻ Refresh</button>
+    </div>
+    <div class="panel-body" id="windowList">
+      <div class="empty-state">Loading windows…</div>
+    </div>
+  </div>
+
+  <!-- ── Panel 2: UI Tree ── -->
+  <div class="panel">
+    <div class="panel-header">
+      <span id="treeTitle">UI Tree</span>
+      <div id="treeSpinner" style="display:none"><div class="spinner"></div></div>
+    </div>
+    <div class="panel-body">
+      <div class="tree-container" id="treeContainer">
+        <div class="empty-state">Select a window to inspect its UI tree.</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Panel 3: Element Detail + Log ── -->
+  <div class="panel" style="grid-column: unset; border-right: none; display: flex; flex-direction: column;">
+
+    <!-- Detail (top half) -->
+    <div style="flex:1; overflow-y:auto; border-bottom:1px solid var(--border);">
+      <div class="panel-header"><span>Element Detail</span></div>
+      <div id="detailPanel">
+        <div class="empty-state">Select an element in the tree.</div>
+      </div>
+    </div>
+
+    <!-- API Log (bottom half) -->
+    <div style="flex:1; overflow:hidden; display:flex; flex-direction:column;">
+      <div class="panel-header">
+        <span>API Log</span>
+        <button class="clear-btn" onclick="clearLog()">Clear</button>
+      </div>
+      <div class="panel-body" id="logPanel">
+        <div class="empty-state" id="logEmpty">No API calls yet.</div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<script>
+const API = '';  // relative — same origin
+let selectedWindow = null;
+let selectedElement = null;
+let logCount = 0;
+
+// ── API helpers ───────────────────────────────────────────────────────────────
+async function apiFetch(method, path, body) {
+  const start = Date.now();
+  let status = 'ok';
+  try {
+    const opts = { method, headers: { 'Content-Type': 'application/json' } };
+    if (body) opts.body = JSON.stringify(body);
+    const res = await fetch(API + path, opts);
+    const data = await res.json();
+    addLog(method, path, res.ok ? 'ok' : 'err', Date.now() - start);
+    return data;
+  } catch(e) {
+    addLog(method, path, 'err', Date.now() - start);
+    throw e;
+  }
+}
+
+// ── Log ───────────────────────────────────────────────────────────────────────
+function addLog(method, path, status, ms) {
+  const el = document.getElementById('logEmpty');
+  if (el) el.remove();
+  const panel = document.getElementById('logPanel');
+  const div = document.createElement('div');
+  div.className = 'log-entry';
+  const now = new Date();
+  const t = `${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}:${String(now.getSeconds()).padStart(2,'0')}`;
+  div.innerHTML = `
+    <span class="log-time">${t}</span>
+    <span class="log-method ${method}">${method}</span>
+    <span class="log-path">${path}</span>
+    <span class="log-status ${status}">${ms}ms</span>
+  `;
+  panel.insertBefore(div, panel.firstChild);
+  logCount++;
+  if (logCount > 200) panel.lastChild?.remove();
+}
+
+function clearLog() {
+  const panel = document.getElementById('logPanel');
+  panel.innerHTML = '<div class="empty-state" id="logEmpty">No API calls yet.</div>';
+  logCount = 0;
+}
+
+// ── Windows list ──────────────────────────────────────────────────────────────
+async function loadWindows() {
+  const list = document.getElementById('windowList');
+  list.innerHTML = '<div class="empty-state"><div class="spinner"></div></div>';
+  try {
+    const data = await apiFetch('GET', '/windows');
+    if (!data.success) throw new Error(data.error);
+    renderWindowList(data.data);
+    updateStatus(true);
+  } catch(e) {
+    list.innerHTML = `<div class="empty-state" style="color:var(--red)">${e.message}</div>`;
+    updateStatus(false);
+  }
+}
+
+function renderWindowList(windows) {
+  const list = document.getElementById('windowList');
+  if (!windows.length) {
+    list.innerHTML = '<div class="empty-state">No windows found.</div>';
+    return;
+  }
+  list.innerHTML = '';
+  windows.forEach(w => {
+    const div = document.createElement('div');
+    div.className = 'window-item' + (selectedWindow?.pid === w.pid ? ' active' : '');
+    div.innerHTML = `
+      <div class="win-title" title="${w.title}">${w.title || '(Untitled)'}</div>
+      <div class="win-meta">
+        <span class="tag pid">PID ${w.pid}</span>
+        <span class="tag exe">${w.exe_name}</span>
+        <span class="tag">${w.rect.width}×${w.rect.height}</span>
+      </div>
+    `;
+    div.onclick = () => selectWindow(w, div);
+    list.appendChild(div);
+  });
+}
+
+function selectWindow(w, el) {
+  document.querySelectorAll('.window-item').forEach(x => x.classList.remove('active'));
+  el.classList.add('active');
+  selectedWindow = w;
+  loadTree(w.pid, w.title);
+}
+
+// ── UI Tree ───────────────────────────────────────────────────────────────────
+async function loadTree(pid, title) {
+  document.getElementById('treeTitle').textContent = `UI Tree — ${title}`;
+  document.getElementById('treeSpinner').style.display = '';
+  const container = document.getElementById('treeContainer');
+  container.innerHTML = '';
+  try {
+    const data = await apiFetch('GET', `/windows/${pid}/tree`);
+    if (!data.success) throw new Error(data.error);
+    container.appendChild(buildTreeNode(data.data));
+  } catch(e) {
+    container.innerHTML = `<div class="empty-state" style="color:var(--red)">${e.message}</div>`;
+  } finally {
+    document.getElementById('treeSpinner').style.display = 'none';
+  }
+}
+
+function buildTreeNode(elem) {
+  const div = document.createElement('div');
+  div.className = 'tree-node';
+
+  const row = document.createElement('div');
+  row.className = 'tree-row';
+  row.dataset.id = elem.oculos_id;
+
+  const typeColor = getTypeClass(elem.type);
+  const hasChildren = elem.children && elem.children.length > 0;
+
+  row.innerHTML = `
+    <span class="tree-toggle">${hasChildren ? '▶' : ' '}</span>
+    <span class="tree-type ${typeColor}">${elem.type}</span>
+    <span class="tree-label" title="${elem.label}">${elem.label || elem.automation_id || elem.class_name || '—'}</span>
+  `;
+
+  row.onclick = (e) => {
+    e.stopPropagation();
+    selectElement(elem, row);
+    if (hasChildren) {
+      const childDiv = div.querySelector(':scope > .tree-children');
+      const toggle = row.querySelector('.tree-toggle');
+      if (childDiv) {
+        const hidden = childDiv.style.display === 'none';
+        childDiv.style.display = hidden ? '' : 'none';
+        toggle.textContent = hidden ? '▼' : '▶';
+      }
+    }
+  };
+
+  div.appendChild(row);
+
+  if (hasChildren) {
+    const childDiv = document.createElement('div');
+    childDiv.className = 'tree-children';
+    childDiv.style.display = 'none'; // collapsed by default
+    elem.children.forEach(child => childDiv.appendChild(buildTreeNode(child)));
+    div.appendChild(childDiv);
+  }
+
+  return div;
+}
+
+function getTypeClass(type) {
+  const map = { Button:'type-Button', Edit:'type-Edit', Text:'type-Text',
+                 Window:'type-Window', Pane:'type-Pane', MenuItem:'type-MenuItem' };
+  return map[type] || 'type-default';
+}
+
+function selectElement(elem, row) {
+  document.querySelectorAll('.tree-row').forEach(r => r.classList.remove('selected'));
+  row.classList.add('selected');
+  selectedElement = elem;
+  renderDetail(elem);
+}
+
+// ── Detail panel ──────────────────────────────────────────────────────────────
+function renderDetail(elem) {
+  const panel = document.getElementById('detailPanel');
+  const canClick = ['Button','MenuItem','TabItem','Link','CheckBox','RadioButton'].includes(elem.type);
+  const canText  = ['Edit','Document'].includes(elem.type);
+
+  panel.innerHTML = `
+    <div class="detail-grid">
+      <div class="detail-section">
+        <h4>Identity</h4>
+        <div class="detail-row"><span class="detail-key">oculos_id</span><span class="detail-val" title="${elem.oculos_id}">${elem.oculos_id.split('-')[0]}…</span></div>
+        <div class="detail-row"><span class="detail-key">Type</span><span class="detail-val">${elem.type}</span></div>
+        <div class="detail-row"><span class="detail-key">Label</span><span class="detail-val">${elem.label || '—'}</span></div>
+        <div class="detail-row"><span class="detail-key">Value</span><span class="detail-val">${elem.value ?? '—'}</span></div>
+        <div class="detail-row"><span class="detail-key">Automation ID</span><span class="detail-val">${elem.automation_id || '—'}</span></div>
+        <div class="detail-row"><span class="detail-key">Class</span><span class="detail-val">${elem.class_name || '—'}</span></div>
+      </div>
+      <div class="detail-section">
+        <h4>Geometry</h4>
+        <div class="detail-row"><span class="detail-key">X, Y</span><span class="detail-val">${elem.rect.x}, ${elem.rect.y}</span></div>
+        <div class="detail-row"><span class="detail-key">Size</span><span class="detail-val">${elem.rect.width} × ${elem.rect.height}</span></div>
+      </div>
+      <div class="detail-section">
+        <h4>State</h4>
+        <div class="detail-row"><span class="detail-key">Enabled</span><span class="detail-val" style="color:${elem.enabled?'var(--green)':'var(--red)'}">${elem.enabled?'Yes':'No'}</span></div>
+        <div class="detail-row"><span class="detail-key">Focused</span><span class="detail-val" style="color:${elem.focused?'var(--accent)':'var(--text-dim)'}">${elem.focused?'Yes':'No'}</span></div>
+        <div class="detail-row"><span class="detail-key">Children</span><span class="detail-val">${elem.children?.length ?? 0}</span></div>
+      </div>
+      ${canClick ? `
+      <div class="detail-section">
+        <h4>Actions</h4>
+        <button class="action-btn" onclick="doClick('${elem.oculos_id}')">⚡ Click / Invoke</button>
+      </div>` : ''}
+      ${canText ? `
+      <div class="detail-section">
+        <h4>Set Text</h4>
+        <input class="text-input" id="textInput" placeholder="Enter text…" value="${elem.value || ''}"/>
+        <button class="action-btn" style="margin-top:6px" onclick="doSetText('${elem.oculos_id}')">✎ Set Text</button>
+      </div>` : ''}
+    </div>
+  `;
+}
+
+// ── Interactions ──────────────────────────────────────────────────────────────
+async function doClick(id) {
+  try {
+    const data = await apiFetch('POST', `/interact/${id}/click`);
+    if (!data.success) throw new Error(data.error);
+  } catch(e) {
+    alert('Click failed: ' + e.message);
+  }
+}
+
+async function doSetText(id) {
+  const input = document.getElementById('textInput');
+  if (!input) return;
+  try {
+    const data = await apiFetch('POST', `/interact/${id}/set-text`, { text: input.value });
+    if (!data.success) throw new Error(data.error);
+  } catch(e) {
+    alert('Set text failed: ' + e.message);
+  }
+}
+
+// ── Status ────────────────────────────────────────────────────────────────────
+function updateStatus(ok) {
+  const dot = document.getElementById('statusDot');
+  const txt = document.getElementById('statusText');
+  dot.style.background = ok ? 'var(--green)' : 'var(--red)';
+  txt.textContent = ok ? 'Connected' : 'Error';
+}
+
+// ── Init ──────────────────────────────────────────────────────────────────────
+loadWindows();
+</script>
+</body>
+</html>
