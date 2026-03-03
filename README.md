@@ -21,7 +21,7 @@
 
 <p align="center">
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="MIT License" /></a>
-  <a href="https://github.com/stifhq/oculos/stargazers"><img src="https://img.shields.io/github/stars/stifhq/oculos?style=social" alt="GitHub Stars" /></a>
+  <a href="https://github.com/huseyinstif/oculos/stargazers"><img src="https://img.shields.io/github/stars/huseyinstif/oculos?style=social" alt="GitHub Stars" /></a>
   <img src="https://img.shields.io/badge/built_with-Rust-dea584.svg" alt="Built with Rust" />
   <img src="https://img.shields.io/badge/platform-Windows%20%7C%20Linux%20%7C%20macOS-informational" alt="Platforms" />
 </p>
@@ -34,23 +34,10 @@ No screenshots. No pixel coordinates. No browser extensions. No code injection. 
 
 ---
 
-## Highlights
-
-- 🔍 **Accessibility-first** — reads the native OS UI tree (Windows UIA, Linux AT-SPI2, macOS AX). Deterministic, instant, zero GPU cost.
-- 🌐 **REST API** — discover windows, search elements, click/type/toggle/scroll. Any language, any HTTP client.
-- 🤖 **MCP server** — plug directly into Claude, Cursor, Windsurf, or any MCP-compatible agent. Full tool schemas included.
-- 🖥️ **Web dashboard** — built-in UI at `localhost:7878` with element inspector, tree search, automation recorder, and live WebSocket events.
-- ⚡ **Single binary** — Rust-native, ~3 MB, no runtime dependencies. Build once, run everywhere.
-- 🔒 **100% local** — your data never leaves your machine. No cloud, no telemetry, no API keys required.
-- 🎯 **Element highlighting** — native overlay to visually mark any element on screen via API.
-- 🎬 **Automation recorder** — record interactions in the dashboard, export as Python / JavaScript / curl.
-
----
-
 ## Quick Start
 
 ```bash
-git clone https://github.com/stifhq/oculos.git
+git clone https://github.com/huseyinstif/oculos.git
 cd oculos
 cargo build --release
 ```
