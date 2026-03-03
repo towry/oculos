@@ -34,6 +34,24 @@ No screenshots. No pixel coordinates. No browser extensions. No code injection. 
 
 ---
 
+### Claude Code + OculOS → Spotify
+
+<p align="center">
+  <img src="static/demo-mcp.png" width="720" alt="Claude Code controlling Spotify through OculOS MCP" />
+</p>
+
+<sub>Claude Code uses OculOS MCP tools to find Spotify, focus it, search for a song, and play it — fully autonomous.</sub>
+
+### Web Dashboard
+
+<p align="center">
+  <img src="static/demo-dashboard.png" width="720" alt="OculOS Dashboard — element tree inspector" />
+</p>
+
+<sub>Built-in dashboard with window list, interactive element tree, inspector, recorder, and live WebSocket events.</sub>
+
+---
+
 ## Quick Start
 
 ```bash
