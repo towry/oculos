@@ -34,7 +34,12 @@ pub struct MacOsUiBackend {
 impl MacOsUiBackend {
     pub fn new() -> Result<Self> {
         // Check if we have accessibility permissions
-        if !accessibility::application_is_trusted_with_prompt() {
+        // AXIsProcessTrustedWithOptions is in ApplicationServices framework
+        extern "C" {
+            fn AXIsProcessTrustedWithOptions(options: core_foundation::base::CFTypeRef) -> bool;
+        }
+        let trusted = unsafe { AXIsProcessTrustedWithOptions(std::ptr::null()) };
+        if !trusted {
             tracing::warn!(
                 "Accessibility permission not granted. \
                  Go to System Settings → Privacy & Security → Accessibility and enable OculOS."
@@ -73,16 +78,11 @@ impl MacOsUiBackend {
 
     fn get_children(element: &AXUIElement) -> Vec<AXUIElement> {
         element
-            .attribute(&AXAttribute::new(&CFString::new("AXChildren")))
+            .attribute(&AXAttribute::children())
             .ok()
-            .and_then(|v| v.downcast::<CFArray<CFType>>())
             .map(|arr| {
                 (0..arr.len())
-                    .filter_map(|i| {
-                        let item = arr.get(i)?;
-                        // Safety: AXUIElement items in AXChildren array
-                        Some(unsafe { AXUIElement::from_CFType_unchecked(item) })
-                    })
+                    .filter_map(|i| arr.get(i).map(|item| (*item).clone()))
                     .collect()
             })
             .unwrap_or_default()
@@ -126,9 +126,8 @@ impl MacOsUiBackend {
 
     fn collect_actions(element: &AXUIElement) -> Vec<String> {
         let ax_actions = element
-            .attribute(&AXAttribute::new(&CFString::new("AXActionNames")))
+            .action_names()
             .ok()
-            .and_then(|v| v.downcast::<CFArray<CFString>>())
             .map(|arr| {
                 (0..arr.len())
                     .filter_map(|i| arr.get(i).map(|s| s.to_string()))
@@ -419,82 +418,118 @@ impl MacOsUiBackend {
 
 impl UiBackend for MacOsUiBackend {
     fn list_windows(&self) -> Result<Vec<WindowInfo>> {
-        // Use the system-wide element to enumerate running apps
-        let system = AXUIElement::system_wide();
+        use core_foundation::base::{CFTypeRef, TCFType};
+        use core_foundation::dictionary::CFDictionaryRef;
+        use core_foundation::number::CFNumber;
+        use core_foundation::string::CFString;
+        use core_graphics::window::{
+            kCGNullWindowID, kCGWindowListExcludeDesktopElements,
+            kCGWindowListOptionOnScreenOnly, kCGWindowLayer, kCGWindowName,
+            kCGWindowNumber, kCGWindowOwnerName, kCGWindowOwnerPID,
+            CGWindowListCopyWindowInfo,
+        };
+
         let mut windows = Vec::new();
 
-        // Get running applications via NSWorkspace (through CGWindowListCopyWindowInfo)
-        // We use the accessibility API to iterate apps with windows
-        unsafe {
-            let workspace_class = objc2::runtime::AnyClass::get(c"NSWorkspace").ok_or_else(|| {
-                anyhow!("Failed to get NSWorkspace class")
-            })?;
-            let shared: *mut objc2::runtime::AnyObject =
-                objc2::msg_send![workspace_class, sharedWorkspace];
-            let apps: *mut objc2::runtime::AnyObject =
-                objc2::msg_send![shared, runningApplications];
-            let count: usize = objc2::msg_send![apps, count];
+        let option = kCGWindowListOptionOnScreenOnly | kCGWindowListExcludeDesktopElements;
+        let array_ref = unsafe { CGWindowListCopyWindowInfo(option, kCGNullWindowID) };
+        if array_ref.is_null() {
+            return Err(anyhow!("CGWindowListCopyWindowInfo returned null"));
+        }
 
-            for i in 0..count {
-                let app: *mut objc2::runtime::AnyObject =
-                    objc2::msg_send![apps, objectAtIndex: i];
-                let pid: i32 = objc2::msg_send![app, processIdentifier];
-                let name: *mut objc2::runtime::AnyObject =
-                    objc2::msg_send![app, localizedName];
+        let count = unsafe { core_foundation::array::CFArrayGetCount(array_ref) };
 
-                if name.is_null() {
+        for i in 0..count {
+            unsafe {
+                let dict_ref = core_foundation::array::CFArrayGetValueAtIndex(array_ref, i)
+                    as CFDictionaryRef;
+                if dict_ref.is_null() {
                     continue;
                 }
 
-                let title: *const std::os::raw::c_char =
-                    objc2::msg_send![name, UTF8String];
-                if title.is_null() {
-                    continue;
-                }
-                let title = std::ffi::CStr::from_ptr(title)
-                    .to_string_lossy()
-                    .to_string();
-
-                // Skip background-only apps
-                let activation_policy: i64 =
-                    objc2::msg_send![app, activationPolicy];
-                if activation_policy != 0 {
-                    // NSApplicationActivationPolicyRegular = 0
-                    continue;
-                }
-
-                let app_elem = AXUIElement::application(pid);
-                let app_windows = Self::get_children(&app_elem);
-
-                if app_windows.is_empty() {
-                    // App has no accessible windows, still list it
-                    windows.push(WindowInfo {
-                        pid: pid as u32,
-                        hwnd: 0,
-                        title: title.clone(),
-                        exe_name: title,
-                        rect: Rect { x: 0, y: 0, width: 0, height: 0 },
-                        visible: true,
-                    });
-                } else {
-                    for (idx, win) in app_windows.iter().enumerate() {
-                        let win_title = Self::get_string_attr(win, "AXTitle")
-                            .unwrap_or_else(|| title.clone());
-                        let (x, y) = Self::get_position(win);
-                        let (w, h) = Self::get_size(win);
-
-                        windows.push(WindowInfo {
-                            pid: pid as u32,
-                            hwnd: idx + 1, // macOS doesn't have HWNDs, use index
-                            title: win_title,
-                            exe_name: title.clone(),
-                            rect: Rect { x, y, width: w, height: h },
-                            visible: true,
-                        });
+                // Helper to get a value from the dict by key
+                let get_val = |key: CFTypeRef| -> CFTypeRef {
+                    let mut value: CFTypeRef = std::ptr::null();
+                    if core_foundation::dictionary::CFDictionaryGetValueIfPresent(
+                        dict_ref,
+                        key as *const _,
+                        &mut value as *mut _ as *mut _,
+                    ) != 0
+                    {
+                        value
+                    } else {
+                        std::ptr::null()
                     }
+                };
+
+                // Extract PID
+                let pid_val = get_val(kCGWindowOwnerPID as CFTypeRef);
+                if pid_val.is_null() {
+                    continue;
                 }
+                let pid_num = CFNumber::wrap_under_get_rule(pid_val as _);
+                let pid = pid_num.to_i64().unwrap_or(0) as u32;
+                if pid == 0 {
+                    continue;
+                }
+
+                // Extract layer — skip windows on non-standard layers
+                let layer_val = get_val(kCGWindowLayer as CFTypeRef);
+                let layer = if !layer_val.is_null() {
+                    CFNumber::wrap_under_get_rule(layer_val as _).to_i64().unwrap_or(0)
+                } else {
+                    0
+                };
+                if layer != 0 {
+                    continue;
+                }
+
+                // Extract owner name
+                let name_val = get_val(kCGWindowOwnerName as CFTypeRef);
+                let owner_name = if !name_val.is_null() {
+                    CFString::wrap_under_get_rule(name_val as _).to_string()
+                } else {
+                    String::new()
+                };
+                if owner_name.is_empty() {
+                    continue;
+                }
+
+                // Extract window name
+                let wname_val = get_val(kCGWindowName as CFTypeRef);
+                let window_name = if !wname_val.is_null() {
+                    CFString::wrap_under_get_rule(wname_val as _).to_string()
+                } else {
+                    String::new()
+                };
+
+                let title = if window_name.is_empty() {
+                    owner_name.clone()
+                } else {
+                    window_name
+                };
+
+                // Extract window number as pseudo-hwnd
+                let num_val = get_val(kCGWindowNumber as CFTypeRef);
+                let window_number = if !num_val.is_null() {
+                    CFNumber::wrap_under_get_rule(num_val as _).to_i64().unwrap_or(0) as usize
+                } else {
+                    0
+                };
+
+                windows.push(WindowInfo {
+                    pid,
+                    hwnd: window_number,
+                    title,
+                    exe_name: owner_name,
+                    rect: Rect { x: 0, y: 0, width: 0, height: 0 },
+                    visible: true,
+                });
             }
         }
+
+        // Release the array
+        unsafe { core_foundation::base::CFRelease(array_ref as _) };
 
         Ok(windows)
     }
@@ -627,7 +662,7 @@ impl UiBackend for MacOsUiBackend {
         };
 
         unsafe {
-            use core_graphics::event::{CGEvent, CGEventType, ScrollEventUnit};
+            use core_graphics::event::{CGEvent, ScrollEventUnit};
             use core_graphics::event_source::{CGEventSource, CGEventSourceStateID};
 
             let source = CGEventSource::new(CGEventSourceStateID::HIDSystemState)

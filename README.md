@@ -55,6 +55,17 @@ cd oculos
 cargo build --release
 ```
 
+### macOS: Grant Accessibility Permission
+
+OculOS reads the OS accessibility tree, so macOS requires you to grant permission:
+
+1. Open **System Settings → Privacy & Security → Accessibility**
+2. Click the **lock icon** and enter your password
+3. Click **+** and add your terminal app (Terminal, iTerm2, Windsurf, etc.) or the `oculos` binary itself
+4. Make sure the toggle is **enabled**
+
+> Without this permission, OculOS can list windows but cannot read UI elements or interact with them.
+
 ### HTTP mode (API + Dashboard)
 
 ```bash
@@ -195,7 +206,7 @@ Built-in web UI at `http://127.0.0.1:7878`:
 |----------|---------|--------|
 | **Windows** | UI Automation (`windows-rs`) | ✅ Full — Win32, WPF, Electron, Qt |
 | **Linux** | AT-SPI2 (`atspi` + `zbus`) | ✅ Working — GTK, Qt, Electron |
-| **macOS** | Accessibility API | 🚧 Planned |
+| **macOS** | Accessibility API (`AXUIElement` + CoreGraphics) | ✅ Working — Cocoa, Electron, Qt |
 
 ---
 
@@ -232,6 +243,7 @@ oculos [OPTIONS]
 ### Core
 - [x] Windows UIA backend (full — Win32, WPF, Electron, Qt)
 - [x] Linux AT-SPI2 backend
+- [x] macOS Accessibility backend (`AXUIElement`, CoreGraphics window enumeration, CGEvent keyboard simulation)
 - [x] REST API server (Axum)
 - [x] MCP server (JSON-RPC 2.0 over stdio)
 - [x] Session-scoped element registry with UUIDs
@@ -252,7 +264,7 @@ oculos [OPTIONS]
 - [x] Health endpoint (uptime, version, platform)
 
 ### Planned
-- [ ] macOS backend (`AXUIElement`)
+- [ ] macOS element highlighting (native overlay)
 - [ ] Python & TypeScript client SDKs
 - [ ] Batch operations (multiple interactions per request)
 - [ ] Conditional waits (wait for element to appear)
