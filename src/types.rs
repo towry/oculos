@@ -185,6 +185,14 @@ pub struct ScrollPayload {
     pub direction: String,
 }
 
+#[derive(Debug, Deserialize)]
+pub struct HighlightPayload {
+    #[serde(default = "default_highlight_duration")]
+    pub duration_ms: u64,
+}
+
+fn default_highlight_duration() -> u64 { 2000 }
+
 // ── ElementType helpers ───────────────────────────────────────────────────────
 
 impl From<&str> for ElementType {

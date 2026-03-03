@@ -40,6 +40,10 @@ use windows::{
                 IsWindowVisible, SetForegroundWindow,
             },
         },
+        Graphics::Gdi::{
+            CreatePen, DeleteObject, GetDC, ReleaseDC,
+            SelectObject, SetROP2, PS_SOLID, R2_NOTXORPEN,
+        },
     },
 };
 
@@ -791,6 +795,35 @@ impl UiBackend for WindowsUiBackend {
         }
         Ok(())
     }
+
+    fn highlight_element(&self, oculos_id: &str, duration_ms: u64) -> Result<Rect> {
+        let elem = self.find_element(oculos_id)?;
+        let r = unsafe {
+            elem.CurrentBoundingRectangle()?
+        };
+
+        let rect = Rect {
+            x: r.left,
+            y: r.top,
+            width: r.right - r.left,
+            height: r.bottom - r.top,
+        };
+
+        // Draw on a background thread so we don't block the API response
+        let x = r.left;
+        let y = r.top;
+        let w = r.right - r.left;
+        let h = r.bottom - r.top;
+        let dur = duration_ms.min(5000); // cap at 5 seconds
+
+        std::thread::spawn(move || {
+            unsafe {
+                draw_highlight_rect(x, y, w, h, dur);
+            }
+        });
+
+        Ok(rect)
+    }
 }
 
 // ── Win32 helpers ─────────────────────────────────────────────────────────────
@@ -973,6 +1006,49 @@ fn find_main_window(target_pid: u32) -> Option<HWND> {
 
     unsafe { let _ = EnumWindows(Some(callback), LPARAM(ptr)); }
     data.result
+}
+
+/// Draw a highlight rectangle on the desktop using XOR pen.
+/// Draws once, waits `duration_ms`, then draws again to erase (XOR cancels itself).
+unsafe fn draw_highlight_rect(x: i32, y: i32, w: i32, h: i32, duration_ms: u64) {
+    use windows::Win32::Graphics::Gdi::{GetStockObject, NULL_BRUSH};
+
+    let thickness = 3i32;
+    let color = windows::Win32::Foundation::COLORREF(0x00FF8D4C); // blue in BGR
+
+    let pen = CreatePen(PS_SOLID, thickness, color);
+
+    // --- Draw phase ---
+    let hdc = GetDC(HWND::default());
+    if hdc.is_invalid() { return; }
+
+    let old_pen = SelectObject(hdc, pen);
+    let old_brush = SelectObject(hdc, GetStockObject(NULL_BRUSH));
+    SetROP2(hdc, R2_NOTXORPEN);
+
+    windows::Win32::Graphics::Gdi::Rectangle(hdc, x - thickness, y - thickness, x + w + thickness, y + h + thickness);
+
+    SelectObject(hdc, old_pen);
+    SelectObject(hdc, old_brush);
+    ReleaseDC(HWND::default(), hdc);
+
+    // --- Wait ---
+    std::thread::sleep(std::time::Duration::from_millis(duration_ms));
+
+    // --- Erase phase (XOR again cancels the drawing) ---
+    let hdc = GetDC(HWND::default());
+    if hdc.is_invalid() { let _ = DeleteObject(pen); return; }
+
+    let old_pen = SelectObject(hdc, pen);
+    let old_brush = SelectObject(hdc, GetStockObject(NULL_BRUSH));
+    SetROP2(hdc, R2_NOTXORPEN);
+
+    windows::Win32::Graphics::Gdi::Rectangle(hdc, x - thickness, y - thickness, x + w + thickness, y + h + thickness);
+
+    SelectObject(hdc, old_pen);
+    SelectObject(hdc, old_brush);
+    let _ = DeleteObject(pen);
+    ReleaseDC(HWND::default(), hdc);
 }
 
 fn get_exe_name(pid: u32) -> String {

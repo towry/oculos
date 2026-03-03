@@ -1,5 +1,5 @@
 use anyhow::Result;
-use crate::types::{ElementType, UiElement, WindowInfo};
+use crate::types::{ElementType, Rect, UiElement, WindowInfo};
 
 /// Cross-platform UI automation backend.
 ///
@@ -81,6 +81,15 @@ pub trait UiBackend: Send + Sync {
 
     /// Close the window for `pid` gracefully.
     fn close_window(&self, pid: u32) -> Result<()>;
+
+    // ── Highlight ────────────────────────────────────────────────────────
+
+    /// Draw a temporary highlight rectangle around an element on-screen.
+    /// Duration in milliseconds. Default no-op for unsupported platforms.
+    fn highlight_element(&self, oculos_id: &str, duration_ms: u64) -> Result<Rect> {
+        let _ = (oculos_id, duration_ms);
+        Err(anyhow::anyhow!("Highlight not supported on this platform"))
+    }
 }
 
 // ── Platform selection ────────────────────────────────────────────────────────

@@ -68,7 +68,8 @@ async fn main() -> Result<()> {
         return Ok(());
     }
 
-    let state = AppState { backend };
+    let ws_tx = api::ws::create_broadcast();
+    let state = AppState { backend, ws_tx };
 
     // ── CORS ──────────────────────────────────────────────────────────────────
     let cors = CorsLayer::new()

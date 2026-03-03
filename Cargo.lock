@@ -1504,6 +1504,7 @@ dependencies = [
  "core-graphics",
  "dashmap",
  "objc2",
+ "once_cell",
  "reqwest",
  "serde",
  "serde_json",

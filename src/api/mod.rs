@@ -1,16 +1,27 @@
 pub mod interact;
 pub mod windows;
+pub mod ws;
 
 use std::sync::Arc;
-use axum::{routing::{get, post}, Router};
+use std::time::Instant;
+use axum::{routing::{get, post}, Json, Router};
+use once_cell::sync::Lazy;
+use serde::Serialize;
 use crate::platform::UiBackend;
+use crate::types::ApiResponse;
+
+static START_TIME: Lazy<Instant> = Lazy::new(Instant::now);
 
 #[derive(Clone)]
 pub struct AppState {
     pub backend: Arc<dyn UiBackend>,
+    pub ws_tx: ws::WsBroadcast,
 }
 
 pub fn router(state: AppState) -> Router {
+    // Touch the lazy so uptime starts counting from server boot.
+    Lazy::force(&START_TIME);
+
     Router::new()
         // ── Discovery ──────────────────────────────────────────────────────
         .route("/windows",                    get(windows::list_windows))
@@ -34,9 +45,37 @@ pub fn router(state: AppState) -> Router {
         .route("/interact/:id/set-range",     post(interact::set_range))
         .route("/interact/:id/scroll",        post(interact::scroll))
         .route("/interact/:id/scroll-into-view", post(interact::scroll_into_view))
+        .route("/interact/:id/highlight",    post(interact::highlight))
         // ── Health ─────────────────────────────────────────────────────────
         .route("/health",                     get(health))
+        // ── WebSocket ─────────────────────────────────────────────────────
+        .route("/ws",                         get(ws::ws_handler))
         .with_state(state)
 }
 
-async fn health() -> &'static str { "OculOS is running" }
+#[derive(Serialize)]
+struct HealthInfo {
+    status: &'static str,
+    version: &'static str,
+    platform: &'static str,
+    arch: &'static str,
+    uptime_secs: u64,
+}
+
+async fn health() -> Json<ApiResponse<HealthInfo>> {
+    let platform = if cfg!(target_os = "windows") {
+        "windows"
+    } else if cfg!(target_os = "macos") {
+        "macos"
+    } else {
+        "linux"
+    };
+
+    Json(ApiResponse::ok(HealthInfo {
+        status: "running",
+        version: env!("CARGO_PKG_VERSION"),
+        platform,
+        arch: std::env::consts::ARCH,
+        uptime_secs: START_TIME.elapsed().as_secs(),
+    }))
+}
