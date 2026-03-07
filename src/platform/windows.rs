@@ -43,6 +43,9 @@ use windows::{
         Graphics::Gdi::{
             CreatePen, DeleteObject, GetDC, ReleaseDC,
             SelectObject, SetROP2, PS_SOLID, R2_NOTXORPEN,
+            BitBlt, CreateCompatibleBitmap, CreateCompatibleDC, DeleteDC,
+            GetDIBits, BITMAPINFO, BITMAPINFOHEADER, BI_RGB, DIB_RGB_COLORS,
+            SRCCOPY,
         },
     },
 };
@@ -823,6 +826,73 @@ impl UiBackend for WindowsUiBackend {
         });
 
         Ok(rect)
+    }
+
+    fn screenshot_window(&self, pid: u32) -> Result<Vec<u8>> {
+        let hwnd = find_main_window(pid)
+            .ok_or_else(|| anyhow!("No visible window found for PID {}", pid))?;
+
+        unsafe {
+            let mut rc = RECT::default();
+            GetWindowRect(hwnd, &mut rc)?;
+            let w = (rc.right - rc.left) as i32;
+            let h = (rc.bottom - rc.top) as i32;
+            if w <= 0 || h <= 0 {
+                return Err(anyhow!("Window has zero or negative size"));
+            }
+
+            let hdc_screen = GetDC(HWND::default());
+            let hdc_mem = CreateCompatibleDC(hdc_screen);
+            let hbmp = CreateCompatibleBitmap(hdc_screen, w, h);
+            let old = SelectObject(hdc_mem, hbmp);
+
+            BitBlt(hdc_mem, 0, 0, w, h, hdc_screen, rc.left, rc.top, SRCCOPY)?;
+
+            // Read pixels via GetDIBits
+            let mut bmi = BITMAPINFO {
+                bmiHeader: BITMAPINFOHEADER {
+                    biSize: size_of::<BITMAPINFOHEADER>() as u32,
+                    biWidth: w,
+                    biHeight: -h, // top-down
+                    biPlanes: 1,
+                    biBitCount: 32,
+                    biCompression: BI_RGB.0 as u32,
+                    ..Default::default()
+                },
+                ..Default::default()
+            };
+
+            let mut pixels = vec![0u8; (w * h * 4) as usize];
+            GetDIBits(
+                hdc_mem,
+                hbmp,
+                0,
+                h as u32,
+                Some(pixels.as_mut_ptr() as *mut _),
+                &mut bmi,
+                DIB_RGB_COLORS,
+            );
+
+            // Cleanup GDI
+            SelectObject(hdc_mem, old);
+            DeleteObject(hbmp);
+            DeleteDC(hdc_mem);
+            ReleaseDC(HWND::default(), hdc_screen);
+
+            // Convert BGRA → RGBA
+            for chunk in pixels.chunks_exact_mut(4) {
+                chunk.swap(0, 2); // B ↔ R
+            }
+
+            // Encode to PNG
+            let img = image::RgbaImage::from_raw(w as u32, h as u32, pixels)
+                .ok_or_else(|| anyhow!("Failed to create image buffer"))?;
+            let mut png_buf = std::io::Cursor::new(Vec::new());
+            img.write_to(&mut png_buf, image::ImageFormat::Png)
+                .context("Failed to encode PNG")?;
+
+            Ok(png_buf.into_inner())
+        }
     }
 }
 
