@@ -21,7 +21,7 @@ use platform::{PlatformBackend, UiBackend};
 
 /// OculOS — "If it's on the screen, it's an API."
 #[derive(Parser, Debug)]
-#[command(name = "oculos", about = "Universal UI automation API server")]
+#[command(name = "oculos", version, about = "Universal UI automation API server")]
 struct Args {
     /// Address to bind the API server on.
     #[arg(short, long, default_value = "127.0.0.1:7878")]

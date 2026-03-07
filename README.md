@@ -16,7 +16,9 @@
   <a href="#client-sdks">SDKs</a> •
   <a href="#mcp-setup">MCP Setup</a> •
   <a href="#dashboard">Dashboard</a> •
-  <a href="./AGENTS.md">Agent Prompt</a> •
+  <a href="./examples">Examples</a> •
+  <a href="./openapi.yaml">API Spec</a> •
+  <a href="./CHANGELOG.md">Changelog</a> •
   <a href="./CONTRIBUTING.md">Contributing</a>
 </p>
 
@@ -334,8 +336,11 @@ oculos [OPTIONS]
 - [x] Conditional waits (`/wait` endpoint with timeout)
 - [x] Screenshot capture (`/screenshot` endpoint)
 - [x] GitHub Actions CI (Windows, Linux, macOS)
+- [x] Docker image for CI/CD
+- [x] OpenAPI spec
+- [x] `--version` CLI flag
 - [ ] Element caching & diffing (change detection)
-- [ ] Docker image for CI/CD
+- [ ] PyPI / npm SDK publishing
 
 ---
 
@@ -346,7 +351,7 @@ We welcome contributions! See [CONTRIBUTING.md](./CONTRIBUTING.md) for details.
 **Top areas:**
 - **Tests** — cross-app integration tests
 - **macOS highlight** — native overlay for element highlighting
-- **Batch operations** — multiple interactions per request
+- **Element caching** — change detection & diffing
 - **Documentation** — guides, examples, tutorials
 
 ---

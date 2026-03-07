@@ -1,0 +1,603 @@
+openapi: 3.1.0
+info:
+  title: OculOS API
+  description: |
+    Universal UI automation API. Control any desktop app through structured JSON.
+    OculOS reads the OS accessibility tree and exposes every button, text field,
+    checkbox, and menu item as an API endpoint.
+  version: 0.1.0
+  license:
+    name: MIT
+    url: https://github.com/huseyinstif/oculos/blob/main/LICENSE
+  contact:
+    url: https://github.com/huseyinstif/oculos
+
+servers:
+  - url: http://127.0.0.1:7878
+    description: Local OculOS server
+
+paths:
+  /health:
+    get:
+      summary: Health check
+      tags: [System]
+      responses:
+        "200":
+          description: Server status
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthResponse"
+
+  /windows:
+    get:
+      summary: List all visible windows
+      tags: [Discovery]
+      responses:
+        "200":
+          description: List of windows
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WindowListResponse"
+
+  /windows/{pid}/tree:
+    get:
+      summary: Full UI element tree for a process
+      tags: [Discovery]
+      parameters:
+        - $ref: "#/components/parameters/pid"
+      responses:
+        "200":
+          description: Element tree
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ElementResponse"
+        "404":
+          description: Window not found
+
+  /windows/{pid}/find:
+    get:
+      summary: Search for elements
+      tags: [Discovery]
+      parameters:
+        - $ref: "#/components/parameters/pid"
+        - name: q
+          in: query
+          description: Text to match against label or automation_id
+          schema:
+            type: string
+        - name: type
+          in: query
+          description: "Element type filter (Button, Edit, CheckBox, etc.)"
+          schema:
+            type: string
+        - name: interactive
+          in: query
+          description: "Return only elements with actions"
+          schema:
+            type: string
+            enum: ["true", "false"]
+      responses:
+        "200":
+          description: Matching elements
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ElementListResponse"
+
+  /windows/{pid}/wait:
+    get:
+      summary: Wait for an element to appear
+      description: Polls every 250ms until a matching element is found or timeout is reached.
+      tags: [Discovery]
+      parameters:
+        - $ref: "#/components/parameters/pid"
+        - name: q
+          in: query
+          schema:
+            type: string
+        - name: type
+          in: query
+          schema:
+            type: string
+        - name: interactive
+          in: query
+          schema:
+            type: string
+        - name: timeout
+          in: query
+          description: Timeout in milliseconds (default 5000, max 30000)
+          schema:
+            type: integer
+            default: 5000
+      responses:
+        "200":
+          description: Matching elements found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ElementListResponse"
+        "408":
+          description: Timeout — no matching element found
+
+  /windows/{pid}/screenshot:
+    get:
+      summary: Capture window screenshot
+      tags: [Window Operations]
+      parameters:
+        - $ref: "#/components/parameters/pid"
+      responses:
+        "200":
+          description: PNG image
+          content:
+            image/png:
+              schema:
+                type: string
+                format: binary
+        "404":
+          description: Window not found
+
+  /windows/{pid}/focus:
+    post:
+      summary: Bring window to foreground
+      tags: [Window Operations]
+      parameters:
+        - $ref: "#/components/parameters/pid"
+      responses:
+        "200":
+          description: Success
+
+  /windows/{pid}/close:
+    post:
+      summary: Close window gracefully
+      tags: [Window Operations]
+      parameters:
+        - $ref: "#/components/parameters/pid"
+      responses:
+        "200":
+          description: Success
+
+  /hwnd/{hwnd}/tree:
+    get:
+      summary: UI tree by window handle
+      tags: [Discovery]
+      parameters:
+        - $ref: "#/components/parameters/hwnd"
+      responses:
+        "200":
+          description: Element tree
+
+  /hwnd/{hwnd}/find:
+    get:
+      summary: Search elements by window handle
+      tags: [Discovery]
+      parameters:
+        - $ref: "#/components/parameters/hwnd"
+        - name: q
+          in: query
+          schema:
+            type: string
+        - name: type
+          in: query
+          schema:
+            type: string
+        - name: interactive
+          in: query
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Matching elements
+
+  /interact/{id}/click:
+    post:
+      summary: Click an element
+      tags: [Interactions]
+      parameters:
+        - $ref: "#/components/parameters/elementId"
+      responses:
+        "200":
+          description: Success
+        "404":
+          description: Element not found
+
+  /interact/{id}/set-text:
+    post:
+      summary: Set text content
+      tags: [Interactions]
+      parameters:
+        - $ref: "#/components/parameters/elementId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [text]
+              properties:
+                text:
+                  type: string
+      responses:
+        "200":
+          description: Success
+
+  /interact/{id}/send-keys:
+    post:
+      summary: Simulate keyboard input
+      tags: [Interactions]
+      parameters:
+        - $ref: "#/components/parameters/elementId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [keys]
+              properties:
+                keys:
+                  type: string
+                  description: "Text + special keys like {ENTER}, {CTRL+A}"
+      responses:
+        "200":
+          description: Success
+
+  /interact/{id}/focus:
+    post:
+      summary: Move keyboard focus to element
+      tags: [Interactions]
+      parameters:
+        - $ref: "#/components/parameters/elementId"
+      responses:
+        "200":
+          description: Success
+
+  /interact/{id}/toggle:
+    post:
+      summary: Toggle checkbox or toggle button
+      tags: [Interactions]
+      parameters:
+        - $ref: "#/components/parameters/elementId"
+      responses:
+        "200":
+          description: Success
+
+  /interact/{id}/expand:
+    post:
+      summary: Expand dropdown, tree item, or menu
+      tags: [Interactions]
+      parameters:
+        - $ref: "#/components/parameters/elementId"
+      responses:
+        "200":
+          description: Success
+
+  /interact/{id}/collapse:
+    post:
+      summary: Collapse dropdown, tree item, or menu
+      tags: [Interactions]
+      parameters:
+        - $ref: "#/components/parameters/elementId"
+      responses:
+        "200":
+          description: Success
+
+  /interact/{id}/select:
+    post:
+      summary: Select list item, radio button, or tab
+      tags: [Interactions]
+      parameters:
+        - $ref: "#/components/parameters/elementId"
+      responses:
+        "200":
+          description: Success
+
+  /interact/{id}/set-range:
+    post:
+      summary: Set numeric value on slider or spinner
+      tags: [Interactions]
+      parameters:
+        - $ref: "#/components/parameters/elementId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [value]
+              properties:
+                value:
+                  type: number
+      responses:
+        "200":
+          description: Success
+
+  /interact/{id}/scroll:
+    post:
+      summary: Scroll a container
+      tags: [Interactions]
+      parameters:
+        - $ref: "#/components/parameters/elementId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [direction]
+              properties:
+                direction:
+                  type: string
+                  enum: [up, down, left, right, page-up, page-down]
+      responses:
+        "200":
+          description: Success
+
+  /interact/{id}/scroll-into-view:
+    post:
+      summary: Scroll element into visible viewport
+      tags: [Interactions]
+      parameters:
+        - $ref: "#/components/parameters/elementId"
+      responses:
+        "200":
+          description: Success
+
+  /interact/{id}/highlight:
+    post:
+      summary: Highlight element on screen
+      tags: [Interactions]
+      parameters:
+        - $ref: "#/components/parameters/elementId"
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                duration_ms:
+                  type: integer
+                  default: 2000
+      responses:
+        "200":
+          description: Success with bounding rect
+
+  /interact/batch:
+    post:
+      summary: Execute multiple interactions in one request
+      tags: [Interactions]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BatchPayload"
+      responses:
+        "200":
+          description: Results for each action
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BatchResponse"
+
+  /ws:
+    get:
+      summary: WebSocket for live action events
+      tags: [System]
+      description: Upgrade to WebSocket to receive real-time interaction events.
+
+components:
+  parameters:
+    pid:
+      name: pid
+      in: path
+      required: true
+      schema:
+        type: integer
+      description: Process ID
+
+    hwnd:
+      name: hwnd
+      in: path
+      required: true
+      schema:
+        type: integer
+      description: Window handle
+
+    elementId:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: string
+      description: Element oculos_id
+
+  schemas:
+    ApiResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data: {}
+        error:
+          type: string
+          nullable: true
+
+    HealthResponse:
+      allOf:
+        - $ref: "#/components/schemas/ApiResponse"
+        - type: object
+          properties:
+            data:
+              type: object
+              properties:
+                status:
+                  type: string
+                version:
+                  type: string
+                platform:
+                  type: string
+                arch:
+                  type: string
+                uptime_secs:
+                  type: integer
+
+    Window:
+      type: object
+      properties:
+        pid:
+          type: integer
+        hwnd:
+          type: integer
+        title:
+          type: string
+        exe_name:
+          type: string
+        rect:
+          $ref: "#/components/schemas/Rect"
+        visible:
+          type: boolean
+
+    WindowListResponse:
+      allOf:
+        - $ref: "#/components/schemas/ApiResponse"
+        - type: object
+          properties:
+            data:
+              type: array
+              items:
+                $ref: "#/components/schemas/Window"
+
+    Rect:
+      type: object
+      properties:
+        x:
+          type: integer
+        y:
+          type: integer
+        width:
+          type: integer
+        height:
+          type: integer
+
+    UiElement:
+      type: object
+      properties:
+        oculos_id:
+          type: string
+        type:
+          type: string
+        label:
+          type: string
+        value:
+          type: string
+          nullable: true
+        rect:
+          $ref: "#/components/schemas/Rect"
+        enabled:
+          type: boolean
+        focused:
+          type: boolean
+        toggle_state:
+          type: string
+          nullable: true
+          enum: ["Off", "On", "Indeterminate"]
+        is_selected:
+          type: boolean
+          nullable: true
+        expand_state:
+          type: string
+          nullable: true
+          enum: ["Collapsed", "Expanded", "PartiallyExpanded", "LeafNode"]
+        range:
+          type: object
+          nullable: true
+          properties:
+            value:
+              type: number
+            minimum:
+              type: number
+            maximum:
+              type: number
+            step:
+              type: number
+        automation_id:
+          type: string
+          nullable: true
+        help_text:
+          type: string
+          nullable: true
+        actions:
+          type: array
+          items:
+            type: string
+        children:
+          type: array
+          items:
+            $ref: "#/components/schemas/UiElement"
+
+    ElementResponse:
+      allOf:
+        - $ref: "#/components/schemas/ApiResponse"
+        - type: object
+          properties:
+            data:
+              $ref: "#/components/schemas/UiElement"
+
+    ElementListResponse:
+      allOf:
+        - $ref: "#/components/schemas/ApiResponse"
+        - type: object
+          properties:
+            data:
+              type: array
+              items:
+                $ref: "#/components/schemas/UiElement"
+
+    BatchPayload:
+      type: object
+      required: [actions]
+      properties:
+        actions:
+          type: array
+          items:
+            type: object
+            required: [element_id, action]
+            properties:
+              element_id:
+                type: string
+              action:
+                type: string
+                enum: [click, set-text, send-keys, focus, toggle, expand, collapse, select, set-range, scroll]
+              text:
+                type: string
+              keys:
+                type: string
+              value:
+                type: number
+              direction:
+                type: string
+
+    BatchResponse:
+      allOf:
+        - $ref: "#/components/schemas/ApiResponse"
+        - type: object
+          properties:
+            data:
+              type: array
+              items:
+                type: object
+                properties:
+                  index:
+                    type: integer
+                  action:
+                    type: string
+                  element_id:
+                    type: string
+                  success:
+                    type: boolean
+                  error:
+                    type: string
+                    nullable: true
