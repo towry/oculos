@@ -90,6 +90,20 @@ pub trait UiBackend: Send + Sync {
         let _ = (oculos_id, duration_ms);
         Err(anyhow::anyhow!("Highlight not supported on this platform"))
     }
+
+    // ── Screenshot ─────────────────────────────────────────────────────
+
+    /// Capture a screenshot of the window identified by PID. Returns PNG bytes.
+    fn screenshot_window(&self, pid: u32) -> Result<Vec<u8>> {
+        let _ = pid;
+        Err(anyhow::anyhow!("Screenshot not supported on this platform"))
+    }
+
+    /// Capture a screenshot of a specific element by its oculos_id. Returns PNG bytes.
+    fn screenshot_element(&self, oculos_id: &str) -> Result<Vec<u8>> {
+        let _ = oculos_id;
+        Err(anyhow::anyhow!("Screenshot not supported on this platform"))
+    }
 }
 
 // ── Platform selection ────────────────────────────────────────────────────────

@@ -144,6 +144,8 @@ Every element includes an `actions` array — the API tells you exactly what you
 |----------|-------------|
 | `POST /windows/{pid}/focus` | Bring to foreground |
 | `POST /windows/{pid}/close` | Close gracefully |
+| `GET /windows/{pid}/wait?q=&type=&timeout=` | Wait for element to appear (polls, default 5s) |
+| `GET /windows/{pid}/screenshot` | Capture window as PNG |
 
 ### Element interactions
 
@@ -161,6 +163,7 @@ Every element includes an `actions` array — the API tells you exactly what you
 | `POST /interact/{id}/scroll` | `{"direction":"…"}` | Scroll container |
 | `POST /interact/{id}/scroll-into-view` | — | Scroll into viewport |
 | `POST /interact/{id}/highlight` | `{"duration_ms":N}` | Highlight on screen |
+| `POST /interact/batch` | `{"actions":[...]}` | Execute multiple interactions |
 
 ### System
 
@@ -327,8 +330,10 @@ oculos [OPTIONS]
 ### Planned
 - [ ] macOS element highlighting (native overlay)
 - [x] Python & TypeScript client SDKs
-- [ ] Batch operations (multiple interactions per request)
-- [ ] Conditional waits (wait for element to appear)
+- [x] Batch operations (multiple interactions per request)
+- [x] Conditional waits (`/wait` endpoint with timeout)
+- [x] Screenshot capture (`/screenshot` endpoint)
+- [x] GitHub Actions CI (Windows, Linux, macOS)
 - [ ] Element caching & diffing (change detection)
 - [ ] Docker image for CI/CD
 

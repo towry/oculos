@@ -33,6 +33,10 @@ pub fn router(state: AppState) -> Router {
         // ── Window operations ──────────────────────────────────────────────
         .route("/windows/:pid/focus",         post(windows::focus_window))
         .route("/windows/:pid/close",         post(windows::close_window))
+        // ── Wait / Poll ──────────────────────────────────────────────────
+        .route("/windows/:pid/wait",          get(windows::wait_for_element))
+        // ── Screenshot ───────────────────────────────────────────────────
+        .route("/windows/:pid/screenshot",    get(windows::screenshot_window))
         // ── Element interactions ───────────────────────────────────────────
         .route("/interact/:id/click",         post(interact::click))
         .route("/interact/:id/set-text",      post(interact::set_text))
@@ -46,6 +50,8 @@ pub fn router(state: AppState) -> Router {
         .route("/interact/:id/scroll",        post(interact::scroll))
         .route("/interact/:id/scroll-into-view", post(interact::scroll_into_view))
         .route("/interact/:id/highlight",    post(interact::highlight))
+        // ── Batch ─────────────────────────────────────────────────────────
+        .route("/interact/batch",             post(interact::batch))
         // ── Health ─────────────────────────────────────────────────────────
         .route("/health",                     get(health))
         // ── WebSocket ─────────────────────────────────────────────────────

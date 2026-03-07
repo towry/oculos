@@ -158,10 +158,142 @@ pub async fn highlight(
     Ok(Json(ApiResponse::ok(json!({ "action": "highlight", "rect": { "x": rect.x, "y": rect.y, "width": rect.width, "height": rect.height } }))))
 }
 
+// ── Batch operations ──────────────────────────────────────────────────────────
+
+/// POST /interact/batch
+///
+/// Execute multiple interactions in a single request.
+/// Body: { "actions": [ { "element_id": "...", "action": "click" }, ... ] }
+///
+/// Each action object:
+///   - element_id: String (required)
+///   - action: "click" | "set-text" | "send-keys" | "focus" | "toggle" | "expand" | "collapse" | "select"
+///   - text: String (for set-text)
+///   - keys: String (for send-keys)
+///   - value: f64 (for set-range)
+///   - direction: String (for scroll)
+#[derive(Debug, serde::Deserialize)]
+pub struct BatchPayload {
+    pub actions: Vec<BatchAction>,
+}
+
+#[derive(Debug, serde::Deserialize)]
+pub struct BatchAction {
+    pub element_id: String,
+    pub action: String,
+    pub text: Option<String>,
+    pub keys: Option<String>,
+    pub value: Option<f64>,
+    pub direction: Option<String>,
+}
+
+#[derive(Debug, serde::Serialize)]
+pub struct BatchResult {
+    pub index: usize,
+    pub action: String,
+    pub element_id: String,
+    pub success: bool,
+    pub error: Option<String>,
+}
+
+pub async fn batch(
+    State(s): State<AppState>,
+    Json(payload): Json<BatchPayload>,
+) -> Json<ApiResponse<Vec<BatchResult>>> {
+    let mut results = Vec::new();
+
+    for (i, act) in payload.actions.iter().enumerate() {
+        let b = s.backend.clone();
+        let eid = act.element_id.clone();
+        let action_name = act.action.clone();
+
+        let res = match act.action.as_str() {
+            "click" => {
+                let id = eid.clone();
+                task::spawn_blocking(move || b.click_element(&id)).await
+            }
+            "set-text" => {
+                let id = eid.clone();
+                let text = act.text.clone().unwrap_or_default();
+                task::spawn_blocking(move || b.set_text(&id, &text)).await
+            }
+            "send-keys" => {
+                let id = eid.clone();
+                let keys = act.keys.clone().unwrap_or_default();
+                task::spawn_blocking(move || b.send_keys(&id, &keys)).await
+            }
+            "focus" => {
+                let id = eid.clone();
+                task::spawn_blocking(move || b.focus_element(&id)).await
+            }
+            "toggle" => {
+                let id = eid.clone();
+                task::spawn_blocking(move || b.toggle_element(&id)).await
+            }
+            "expand" => {
+                let id = eid.clone();
+                task::spawn_blocking(move || b.expand_element(&id)).await
+            }
+            "collapse" => {
+                let id = eid.clone();
+                task::spawn_blocking(move || b.collapse_element(&id)).await
+            }
+            "select" => {
+                let id = eid.clone();
+                task::spawn_blocking(move || b.select_element(&id)).await
+            }
+            "set-range" => {
+                let id = eid.clone();
+                let val = act.value.unwrap_or(0.0);
+                task::spawn_blocking(move || b.set_range(&id, val)).await
+            }
+            "scroll" => {
+                let id = eid.clone();
+                let dir = act.direction.clone().unwrap_or_else(|| "down".into());
+                task::spawn_blocking(move || b.scroll_element(&id, &dir)).await
+            }
+            other => {
+                results.push(BatchResult {
+                    index: i,
+                    action: action_name,
+                    element_id: eid,
+                    success: false,
+                    error: Some(format!("Unknown action: {other}")),
+                });
+                continue;
+            }
+        };
+
+        let (success, error) = match res {
+            Ok(Ok(())) => (true, None),
+            Ok(Err(e)) => (false, Some(e.to_string())),
+            Err(e) => (false, Some(e.to_string())),
+        };
+
+        results.push(BatchResult {
+            index: i,
+            action: action_name,
+            element_id: eid,
+            success,
+            error,
+        });
+    }
+
+    Json(ApiResponse::ok(results))
+}
+
 // ── Helper ────────────────────────────────────────────────────────────────────
 
 type Err = (StatusCode, Json<ApiResponse<()>>);
 
 fn e(err: impl ToString) -> Err {
-    (StatusCode::INTERNAL_SERVER_ERROR, Json(ApiResponse::err(err.to_string())))
+    let msg = err.to_string();
+    let status = if msg.contains("not found") {
+        StatusCode::NOT_FOUND
+    } else if msg.contains("not supported") || msg.contains("invalid") {
+        StatusCode::BAD_REQUEST
+    } else {
+        StatusCode::INTERNAL_SERVER_ERROR
+    };
+    (status, Json(ApiResponse::err(msg)))
 }
