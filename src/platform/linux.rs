@@ -4,18 +4,14 @@ use std::sync::Arc;
 use uuid::Uuid;
 
 use atspi::{
-    proxy::accessible::AccessibleProxy,
-    proxy::action::ActionProxy,
-    proxy::application::ApplicationProxy,
-    proxy::component::ComponentProxy,
-    proxy::editable_text::EditableTextProxy,
-    proxy::text::TextProxy,
-    proxy::value::ValueProxy,
+    proxy::accessible::AccessibleProxy, proxy::action::ActionProxy,
+    proxy::application::ApplicationProxy, proxy::component::ComponentProxy,
+    proxy::editable_text::EditableTextProxy, proxy::text::TextProxy, proxy::value::ValueProxy,
     CoordType, Role, State,
 };
-use zbus::Connection;
 use zbus::names::BusName;
 use zbus::zvariant::ObjectPath;
+use zbus::Connection;
 
 use crate::{
     platform::UiBackend,
@@ -219,22 +215,42 @@ impl LinuxUiBackend {
         with_children: bool,
         depth: u32,
     ) -> Result<UiElement> {
-        let zero_rect = Rect { x: 0, y: 0, width: 0, height: 0 };
+        let zero_rect = Rect {
+            x: 0,
+            y: 0,
+            width: 0,
+            height: 0,
+        };
 
         if depth > 48 {
             let id = Uuid::new_v4().to_string();
-            self.registry.insert(id.clone(), StoredElement {
-                bus_name: bname.to_string(),
-                object_path: opath.to_string(),
-            });
+            self.registry.insert(
+                id.clone(),
+                StoredElement {
+                    bus_name: bname.to_string(),
+                    object_path: opath.to_string(),
+                },
+            );
             return Ok(UiElement {
-                oculos_id: id, element_type: ElementType::Unknown,
-                label: String::new(), value: None, text_content: None,
-                rect: zero_rect, enabled: false, focused: false,
-                is_keyboard_focusable: false, toggle_state: None,
-                is_selected: None, expand_state: None, range: None,
-                automation_id: None, class_name: None, help_text: None,
-                keyboard_shortcut: None, actions: vec![], children: vec![],
+                oculos_id: id,
+                element_type: ElementType::Unknown,
+                label: String::new(),
+                value: None,
+                text_content: None,
+                rect: zero_rect,
+                enabled: false,
+                focused: false,
+                is_keyboard_focusable: false,
+                toggle_state: None,
+                is_selected: None,
+                expand_state: None,
+                range: None,
+                automation_id: None,
+                class_name: None,
+                help_text: None,
+                keyboard_shortcut: None,
+                actions: vec![],
+                children: vec![],
             });
         }
 
@@ -255,21 +271,31 @@ impl LinuxUiBackend {
         let is_expandable = states.contains(State::Expandable);
 
         // Bounding box via Component interface
-        let rect = if let Ok(comp) = Self::make_component_proxy(&self.connection, bname, opath).await {
-            if let Ok(extents) = comp.get_extents(CoordType::Screen).await {
-                Rect { x: extents.0, y: extents.1, width: extents.2, height: extents.3 }
+        let rect =
+            if let Ok(comp) = Self::make_component_proxy(&self.connection, bname, opath).await {
+                if let Ok(extents) = comp.get_extents(CoordType::Screen).await {
+                    Rect {
+                        x: extents.0,
+                        y: extents.1,
+                        width: extents.2,
+                        height: extents.3,
+                    }
+                } else {
+                    zero_rect
+                }
             } else {
                 zero_rect
-            }
-        } else {
-            zero_rect
-        };
+            };
 
         // Value (for text fields, sliders, etc.)
         let value = self.get_text_value(bname, opath).await;
 
         let toggle_state = if element_type == ElementType::CheckBox {
-            Some(if is_checked { ToggleState::On } else { ToggleState::Off })
+            Some(if is_checked {
+                ToggleState::On
+            } else {
+                ToggleState::Off
+            })
         } else {
             None
         };
@@ -277,13 +303,19 @@ impl LinuxUiBackend {
         let is_selected = if is_selected_state { Some(true) } else { None };
 
         let expand_state = if is_expandable {
-            Some(if is_expanded { ExpandState::Expanded } else { ExpandState::Collapsed })
+            Some(if is_expanded {
+                ExpandState::Expanded
+            } else {
+                ExpandState::Collapsed
+            })
         } else {
             None
         };
 
         let range = self.get_range_info(bname, opath).await;
-        let actions = self.collect_actions(bname, opath, &element_type, is_keyboard_focusable).await;
+        let actions = self
+            .collect_actions(bname, opath, &element_type, is_keyboard_focusable)
+            .await;
         let help_text = proxy.description().await.ok().filter(|s| !s.is_empty());
 
         // Children
@@ -294,7 +326,9 @@ impl LinuxUiBackend {
                 if let Ok(child) = proxy.get_child_at_index(i).await {
                     let cb = child.name.clone();
                     let cp = child.path.to_string();
-                    if let Ok(elem) = Box::pin(self.build_element_async(&cb, &cp, true, depth + 1)).await {
+                    if let Ok(elem) =
+                        Box::pin(self.build_element_async(&cb, &cp, true, depth + 1)).await
+                    {
                         kids.push(elem);
                     }
                 }
@@ -305,34 +339,63 @@ impl LinuxUiBackend {
         };
 
         let oculos_id = Uuid::new_v4().to_string();
-        self.registry.insert(oculos_id.clone(), StoredElement {
-            bus_name: bname.to_string(),
-            object_path: opath.to_string(),
-        });
+        self.registry.insert(
+            oculos_id.clone(),
+            StoredElement {
+                bus_name: bname.to_string(),
+                object_path: opath.to_string(),
+            },
+        );
 
         Ok(UiElement {
-            oculos_id, element_type, label: name, value, text_content: None,
-            rect, enabled, focused, is_keyboard_focusable, toggle_state,
-            is_selected, expand_state, range, automation_id: None,
-            class_name: None, help_text, keyboard_shortcut: None,
-            actions, children,
+            oculos_id,
+            element_type,
+            label: name,
+            value,
+            text_content: None,
+            rect,
+            enabled,
+            focused,
+            is_keyboard_focusable,
+            toggle_state,
+            is_selected,
+            expand_state,
+            range,
+            automation_id: None,
+            class_name: None,
+            help_text,
+            keyboard_shortcut: None,
+            actions,
+            children,
         })
     }
 
     async fn get_text_value(&self, bname: &str, opath: &str) -> Option<String> {
-        let tp = Self::make_text_proxy(&self.connection, bname, opath).await.ok()?;
+        let tp = Self::make_text_proxy(&self.connection, bname, opath)
+            .await
+            .ok()?;
         let cc = tp.character_count().await.ok()?;
-        if cc == 0 { return None; }
+        if cc == 0 {
+            return None;
+        }
         tp.get_text(0, cc).await.ok().filter(|s| !s.is_empty())
     }
 
     async fn get_range_info(&self, bname: &str, opath: &str) -> Option<RangeInfo> {
-        let vp = Self::make_value_proxy(&self.connection, bname, opath).await.ok()?;
+        let vp = Self::make_value_proxy(&self.connection, bname, opath)
+            .await
+            .ok()?;
         let current = vp.current_value().await.ok()?;
         let minimum = vp.minimum_value().await.unwrap_or(0.0);
         let maximum = vp.maximum_value().await.unwrap_or(100.0);
         let step = vp.minimum_increment().await.unwrap_or(1.0);
-        Some(RangeInfo { value: current, minimum, maximum, step, read_only: false })
+        Some(RangeInfo {
+            value: current,
+            minimum,
+            maximum,
+            step,
+            read_only: false,
+        })
     }
 
     async fn collect_actions(
@@ -363,13 +426,19 @@ impl LinuxUiBackend {
             }
         }
 
-        if Self::make_editable_text_proxy(&self.connection, bname, opath).await.is_ok() {
+        if Self::make_editable_text_proxy(&self.connection, bname, opath)
+            .await
+            .is_ok()
+        {
             actions.push("set-text".into());
             actions.push("send-keys".into());
         }
 
         if matches!(element_type, ElementType::Slider | ElementType::ProgressBar) {
-            if Self::make_value_proxy(&self.connection, bname, opath).await.is_ok() {
+            if Self::make_value_proxy(&self.connection, bname, opath)
+                .await
+                .is_ok()
+            {
                 actions.push("set-range".into());
             }
         }
@@ -403,16 +472,26 @@ impl LinuxUiBackend {
 
             if let Some(ref q) = query_lower {
                 let label_match = elem.label.to_lowercase().contains(q.as_str());
-                let aid_match = elem.automation_id.as_ref()
+                let aid_match = elem
+                    .automation_id
+                    .as_ref()
                     .map(|a| a.to_lowercase().contains(q.as_str()))
                     .unwrap_or(false);
-                if !label_match && !aid_match { matches = false; }
+                if !label_match && !aid_match {
+                    matches = false;
+                }
             }
             if let Some(wanted) = element_type {
-                if &elem.element_type != wanted { matches = false; }
+                if &elem.element_type != wanted {
+                    matches = false;
+                }
             }
-            if interactive_only && elem.actions.is_empty() { matches = false; }
-            if matches { results.push(elem); }
+            if interactive_only && elem.actions.is_empty() {
+                matches = false;
+            }
+            if matches {
+                results.push(elem);
+            }
         }
 
         if let Ok(proxy) = Self::make_accessible_proxy(&self.connection, bname, opath).await {
@@ -422,8 +501,15 @@ impl LinuxUiBackend {
                     let cb = child.name.clone();
                     let cp = child.path.to_string();
                     Box::pin(self.search_elements_async(
-                        &cb, &cp, query, element_type, interactive_only, results, depth + 1,
-                    )).await;
+                        &cb,
+                        &cp,
+                        query,
+                        element_type,
+                        interactive_only,
+                        results,
+                        depth + 1,
+                    ))
+                    .await;
                 }
             }
         }
@@ -436,7 +522,9 @@ impl LinuxUiBackend {
             &self.connection,
             "org.a11y.atspi.Registry",
             "/org/a11y/atspi/accessible/root",
-        ).await.context("Failed to connect to AT-SPI2 registry")?;
+        )
+        .await
+        .context("Failed to connect to AT-SPI2 registry")?;
 
         let child_count = registry.child_count().await.unwrap_or(0);
         for i in 0..child_count {
@@ -444,7 +532,9 @@ impl LinuxUiBackend {
                 let cb = child.name.clone();
                 let cp = child.path.to_string();
 
-                if let Ok(app_proxy) = Self::make_application_proxy(&self.connection, &cb, &cp).await {
+                if let Ok(app_proxy) =
+                    Self::make_application_proxy(&self.connection, &cb, &cp).await
+                {
                     if let Ok(p) = app_proxy.id().await {
                         if p as u32 == pid {
                             return Ok((cb, cp));
@@ -460,10 +550,20 @@ impl LinuxUiBackend {
     async fn get_component_rect(&self, bname: &str, opath: &str) -> Rect {
         if let Ok(comp) = Self::make_component_proxy(&self.connection, bname, opath).await {
             if let Ok(extents) = comp.get_extents(CoordType::Screen).await {
-                return Rect { x: extents.0, y: extents.1, width: extents.2, height: extents.3 };
+                return Rect {
+                    x: extents.0,
+                    y: extents.1,
+                    width: extents.2,
+                    height: extents.3,
+                };
             }
         }
-        Rect { x: 0, y: 0, width: 0, height: 0 }
+        Rect {
+            x: 0,
+            y: 0,
+            width: 0,
+            height: 0,
+        }
     }
 
     // ── Sync wrappers ─────────────────────────────────────────────────────
@@ -482,7 +582,9 @@ impl UiBackend for LinuxUiBackend {
                 &self.connection,
                 "org.a11y.atspi.Registry",
                 "/org/a11y/atspi/accessible/root",
-            ).await.context("Failed to connect to AT-SPI2 registry")?;
+            )
+            .await
+            .context("Failed to connect to AT-SPI2 registry")?;
 
             let child_count = registry.child_count().await.unwrap_or(0);
             let mut windows = Vec::new();
@@ -492,11 +594,17 @@ impl UiBackend for LinuxUiBackend {
                     let cb = child.name.clone();
                     let cp = child.path.to_string();
 
-                    if let Ok(app_proxy) = Self::make_accessible_proxy(&self.connection, &cb, &cp).await {
+                    if let Ok(app_proxy) =
+                        Self::make_accessible_proxy(&self.connection, &cb, &cp).await
+                    {
                         let app_name = app_proxy.name().await.unwrap_or_default();
-                        if app_name.is_empty() { continue; }
+                        if app_name.is_empty() {
+                            continue;
+                        }
 
-                        let pid = if let Ok(ap) = Self::make_application_proxy(&self.connection, &cb, &cp).await {
+                        let pid = if let Ok(ap) =
+                            Self::make_application_proxy(&self.connection, &cb, &cp).await
+                        {
                             ap.id().await.unwrap_or(0) as u32
                         } else {
                             0
@@ -510,14 +618,20 @@ impl UiBackend for LinuxUiBackend {
                                 let wb = win.name.clone();
                                 let wp = win.path.to_string();
 
-                                if let Ok(win_proxy) = Self::make_accessible_proxy(&self.connection, &wb, &wp).await {
+                                if let Ok(win_proxy) =
+                                    Self::make_accessible_proxy(&self.connection, &wb, &wp).await
+                                {
                                     let role = win_proxy.get_role().await.unwrap_or(Role::Invalid);
                                     if matches!(role, Role::Frame | Role::Window | Role::Dialog) {
                                         let title = win_proxy.name().await.unwrap_or_default();
                                         let rect = self.get_component_rect(&wb, &wp).await;
                                         windows.push(WindowInfo {
-                                            pid, hwnd: 0, title, exe_name: app_name.clone(),
-                                            rect, visible: true,
+                                            pid,
+                                            hwnd: 0,
+                                            title,
+                                            exe_name: app_name.clone(),
+                                            rect,
+                                            visible: true,
                                         });
                                         found_window = true;
                                     }
@@ -527,9 +641,16 @@ impl UiBackend for LinuxUiBackend {
 
                         if !found_window && pid > 0 {
                             windows.push(WindowInfo {
-                                pid, hwnd: 0, title: app_name.clone(),
+                                pid,
+                                hwnd: 0,
+                                title: app_name.clone(),
                                 exe_name: app_name,
-                                rect: Rect { x: 0, y: 0, width: 0, height: 0 },
+                                rect: Rect {
+                                    x: 0,
+                                    y: 0,
+                                    width: 0,
+                                    height: 0,
+                                },
                                 visible: true,
                             });
                         }
@@ -549,32 +670,52 @@ impl UiBackend for LinuxUiBackend {
     }
 
     fn get_ui_tree_hwnd(&self, _hwnd: usize) -> Result<UiElement> {
-        Err(anyhow!("Linux does not use window handles (HWND). Use the PID-based endpoint instead."))
+        Err(anyhow!(
+            "Linux does not use window handles (HWND). Use the PID-based endpoint instead."
+        ))
     }
 
     fn find_elements(
-        &self, pid: u32, query: Option<&str>,
-        element_type: Option<&ElementType>, interactive_only: bool,
+        &self,
+        pid: u32,
+        query: Option<&str>,
+        element_type: Option<&ElementType>,
+        interactive_only: bool,
     ) -> Result<Vec<UiElement>> {
         self.block_on(async {
             let (bus, path) = self.find_app_root(pid).await?;
             let mut results = Vec::new();
-            self.search_elements_async(&bus, &path, query, element_type, interactive_only, &mut results, 0).await;
+            self.search_elements_async(
+                &bus,
+                &path,
+                query,
+                element_type,
+                interactive_only,
+                &mut results,
+                0,
+            )
+            .await;
             Ok(results)
         })
     }
 
     fn find_elements_hwnd(
-        &self, _hwnd: usize, _query: Option<&str>,
-        _element_type: Option<&ElementType>, _interactive_only: bool,
+        &self,
+        _hwnd: usize,
+        _query: Option<&str>,
+        _element_type: Option<&ElementType>,
+        _interactive_only: bool,
     ) -> Result<Vec<UiElement>> {
-        Err(anyhow!("Linux does not use window handles (HWND). Use the PID-based endpoint instead."))
+        Err(anyhow!(
+            "Linux does not use window handles (HWND). Use the PID-based endpoint instead."
+        ))
     }
 
     fn click_element(&self, oculos_id: &str) -> Result<()> {
         let (bname, opath) = self.get_stored(oculos_id)?;
         self.block_on(async {
-            let ap = Self::make_action_proxy(&self.connection, &bname, &opath).await
+            let ap = Self::make_action_proxy(&self.connection, &bname, &opath)
+                .await
                 .context("Element does not support Action interface")?;
 
             let action_list = ap.get_actions().await.unwrap_or_default();
@@ -588,20 +729,27 @@ impl UiBackend for LinuxUiBackend {
                 ap.do_action(0).await?;
                 return Ok(());
             }
-            Err(anyhow!("No clickable action found on element '{}'", oculos_id))
+            Err(anyhow!(
+                "No clickable action found on element '{}'",
+                oculos_id
+            ))
         })
     }
 
     fn set_text(&self, oculos_id: &str, text: &str) -> Result<()> {
         let (bname, opath) = self.get_stored(oculos_id)?;
         self.block_on(async {
-            let ep = Self::make_editable_text_proxy(&self.connection, &bname, &opath).await
+            let ep = Self::make_editable_text_proxy(&self.connection, &bname, &opath)
+                .await
                 .context("Element does not support EditableText interface")?;
-            let tp = Self::make_text_proxy(&self.connection, &bname, &opath).await
+            let tp = Self::make_text_proxy(&self.connection, &bname, &opath)
+                .await
                 .context("Element does not support Text interface")?;
 
             let cc = tp.character_count().await.unwrap_or(0);
-            if cc > 0 { let _ = ep.delete_text(0, cc).await; }
+            if cc > 0 {
+                let _ = ep.delete_text(0, cc).await;
+            }
             ep.insert_text(0, text, text.len() as i32).await?;
             Ok(())
         })
@@ -617,19 +765,23 @@ impl UiBackend for LinuxUiBackend {
     fn focus_element(&self, oculos_id: &str) -> Result<()> {
         let (bname, opath) = self.get_stored(oculos_id)?;
         self.block_on(async {
-            let cp = Self::make_component_proxy(&self.connection, &bname, &opath).await
+            let cp = Self::make_component_proxy(&self.connection, &bname, &opath)
+                .await
                 .context("Element does not support Component interface")?;
             cp.grab_focus().await?;
             Ok(())
         })
     }
 
-    fn toggle_element(&self, oculos_id: &str) -> Result<()> { self.click_element(oculos_id) }
+    fn toggle_element(&self, oculos_id: &str) -> Result<()> {
+        self.click_element(oculos_id)
+    }
 
     fn expand_element(&self, oculos_id: &str) -> Result<()> {
         let (bname, opath) = self.get_stored(oculos_id)?;
         self.block_on(async {
-            let ap = Self::make_action_proxy(&self.connection, &bname, &opath).await
+            let ap = Self::make_action_proxy(&self.connection, &bname, &opath)
+                .await
                 .context("Element does not support Action interface")?;
             let action_list = ap.get_actions().await.unwrap_or_default();
             for (i, (name, _, _)) in action_list.iter().enumerate() {
@@ -642,13 +794,18 @@ impl UiBackend for LinuxUiBackend {
         })
     }
 
-    fn collapse_element(&self, oculos_id: &str) -> Result<()> { self.expand_element(oculos_id) }
-    fn select_element(&self, oculos_id: &str) -> Result<()> { self.click_element(oculos_id) }
+    fn collapse_element(&self, oculos_id: &str) -> Result<()> {
+        self.expand_element(oculos_id)
+    }
+    fn select_element(&self, oculos_id: &str) -> Result<()> {
+        self.click_element(oculos_id)
+    }
 
     fn set_range(&self, oculos_id: &str, value: f64) -> Result<()> {
         let (bname, opath) = self.get_stored(oculos_id)?;
         self.block_on(async {
-            let vp = Self::make_value_proxy(&self.connection, &bname, &opath).await
+            let vp = Self::make_value_proxy(&self.connection, &bname, &opath)
+                .await
                 .context("Element does not support Value interface")?;
             vp.set_current_value(value).await?;
             Ok(())
@@ -657,8 +814,12 @@ impl UiBackend for LinuxUiBackend {
 
     fn scroll_element(&self, oculos_id: &str, direction: &str) -> Result<()> {
         let key = match direction {
-            "up" => "Up", "down" => "Down", "left" => "Left", "right" => "Right",
-            "page-up" => "Page_Up", "page-down" => "Page_Down",
+            "up" => "Up",
+            "down" => "Down",
+            "left" => "Left",
+            "right" => "Right",
+            "page-up" => "Page_Up",
+            "page-down" => "Page_Down",
             other => return Err(anyhow!("Unknown scroll direction '{}'", other)),
         };
         self.focus_element(oculos_id)?;
@@ -668,12 +829,20 @@ impl UiBackend for LinuxUiBackend {
     }
 
     fn scroll_into_view(&self, _oculos_id: &str) -> Result<()> {
-        Err(anyhow!("scroll-into-view is not natively supported on Linux AT-SPI2."))
+        Err(anyhow!(
+            "scroll-into-view is not natively supported on Linux AT-SPI2."
+        ))
     }
 
     fn focus_window(&self, pid: u32) -> Result<()> {
         let output = std::process::Command::new("xdotool")
-            .args(["search", "--pid", &pid.to_string(), "--onlyvisible", "windowactivate"])
+            .args([
+                "search",
+                "--pid",
+                &pid.to_string(),
+                "--onlyvisible",
+                "windowactivate",
+            ])
             .output();
         match output {
             Ok(o) if o.status.success() => Ok(()),
@@ -688,11 +857,20 @@ impl UiBackend for LinuxUiBackend {
 
     fn close_window(&self, pid: u32) -> Result<()> {
         let output = std::process::Command::new("xdotool")
-            .args(["search", "--pid", &pid.to_string(), "--onlyvisible", "windowclose"])
+            .args([
+                "search",
+                "--pid",
+                &pid.to_string(),
+                "--onlyvisible",
+                "windowclose",
+            ])
             .output();
         match output {
             Ok(o) if o.status.success() => Ok(()),
-            _ => Err(anyhow!("Failed to close window for PID {}. Is xdotool installed?", pid)),
+            _ => Err(anyhow!(
+                "Failed to close window for PID {}. Is xdotool installed?",
+                pid
+            )),
         }
     }
 }
@@ -701,7 +879,9 @@ impl UiBackend for LinuxUiBackend {
 
 impl LinuxUiBackend {
     fn get_stored(&self, oculos_id: &str) -> Result<(String, String)> {
-        let entry = self.registry.get(oculos_id)
+        let entry = self
+            .registry
+            .get(oculos_id)
             .ok_or_else(|| anyhow!("Element '{}' not found in registry", oculos_id))?;
         let bname = entry.value().bus_name.clone();
         let opath = entry.value().object_path.clone();
@@ -719,7 +899,9 @@ fn send_key_sequence_linux(text: &str) {
             let mut key_name = String::new();
             while let Some(&c) = chars.peek() {
                 chars.next();
-                if c == '}' { break; }
+                if c == '}' {
+                    break;
+                }
                 key_name.push(c);
             }
             send_special_key_linux(&key_name);
@@ -748,14 +930,26 @@ fn send_special_key_linux(key_name: &str) {
         "END" => "End",
         "PGUP" => "Page_Up",
         "PGDN" => "Page_Down",
-        "F1" => "F1", "F2" => "F2", "F3" => "F3", "F4" => "F4",
-        "F5" => "F5", "F6" => "F6", "F7" => "F7", "F8" => "F8",
-        "F9" => "F9", "F10" => "F10", "F11" => "F11", "F12" => "F12",
+        "F1" => "F1",
+        "F2" => "F2",
+        "F3" => "F3",
+        "F4" => "F4",
+        "F5" => "F5",
+        "F6" => "F6",
+        "F7" => "F7",
+        "F8" => "F8",
+        "F9" => "F9",
+        "F10" => "F10",
+        "F11" => "F11",
+        "F12" => "F12",
         s if s.contains('+') => {
             let parts: Vec<&str> = s.splitn(2, '+').collect();
             let modifier = match parts[0] {
-                "CTRL" => "ctrl", "ALT" => "alt", "SHIFT" => "shift",
-                "WIN" | "SUPER" => "super", other => other,
+                "CTRL" => "ctrl",
+                "ALT" => "alt",
+                "SHIFT" => "shift",
+                "WIN" | "SUPER" => "super",
+                other => other,
             };
             let key = parts.get(1).unwrap_or(&"").to_lowercase();
             let combo = format!("{}+{}", modifier, key);

@@ -7,6 +7,11 @@ use windows::{
     core::BSTR,
     Win32::{
         Foundation::{BOOL, HWND, LPARAM, RECT},
+        Graphics::Gdi::{
+            BitBlt, CreateCompatibleBitmap, CreateCompatibleDC, CreatePen, DeleteDC, DeleteObject,
+            GetDC, GetDIBits, ReleaseDC, SelectObject, SetROP2, BITMAPINFO, BITMAPINFOHEADER,
+            BI_RGB, DIB_RGB_COLORS, PS_SOLID, R2_NOTXORPEN, SRCCOPY,
+        },
         System::{
             Com::{CoCreateInstance, CoInitializeEx, CLSCTX_INPROC_SERVER, COINIT_MULTITHREADED},
             Threading::{
@@ -17,19 +22,19 @@ use windows::{
         UI::{
             Accessibility::{
                 CUIAutomation, ExpandCollapseState_Collapsed, ExpandCollapseState_Expanded,
-                ExpandCollapseState_LeafNode, ExpandCollapseState_PartiallyExpanded,
-                IUIAutomation, IUIAutomationCondition, IUIAutomationElement,
-                IUIAutomationExpandCollapsePattern, IUIAutomationInvokePattern,
-                IUIAutomationRangeValuePattern, IUIAutomationScrollItemPattern,
-                IUIAutomationScrollPattern, IUIAutomationSelectionItemPattern,
-                IUIAutomationTextPattern, IUIAutomationTogglePattern, IUIAutomationValuePattern,
-                IUIAutomationWindowPattern, ScrollAmount_LargeDecrement,
-                ScrollAmount_LargeIncrement, ScrollAmount_NoAmount, ScrollAmount_SmallDecrement,
-                ScrollAmount_SmallIncrement, ToggleState_Indeterminate, ToggleState_Off,
-                ToggleState_On, TreeScope_Children, TreeScope_Subtree, UIA_CONTROLTYPE_ID,
-                UIA_ExpandCollapsePatternId, UIA_InvokePatternId, UIA_RangeValuePatternId,
-                UIA_ScrollItemPatternId, UIA_ScrollPatternId, UIA_SelectionItemPatternId,
-                UIA_TextPatternId, UIA_TogglePatternId, UIA_ValuePatternId, UIA_WindowPatternId,
+                ExpandCollapseState_LeafNode, ExpandCollapseState_PartiallyExpanded, IUIAutomation,
+                IUIAutomationCondition, IUIAutomationElement, IUIAutomationExpandCollapsePattern,
+                IUIAutomationInvokePattern, IUIAutomationRangeValuePattern,
+                IUIAutomationScrollItemPattern, IUIAutomationScrollPattern,
+                IUIAutomationSelectionItemPattern, IUIAutomationTextPattern,
+                IUIAutomationTogglePattern, IUIAutomationValuePattern, IUIAutomationWindowPattern,
+                ScrollAmount_LargeDecrement, ScrollAmount_LargeIncrement, ScrollAmount_NoAmount,
+                ScrollAmount_SmallDecrement, ScrollAmount_SmallIncrement,
+                ToggleState_Indeterminate, ToggleState_Off, ToggleState_On, TreeScope_Children,
+                TreeScope_Subtree, UIA_ExpandCollapsePatternId, UIA_InvokePatternId,
+                UIA_RangeValuePatternId, UIA_ScrollItemPatternId, UIA_ScrollPatternId,
+                UIA_SelectionItemPatternId, UIA_TextPatternId, UIA_TogglePatternId,
+                UIA_ValuePatternId, UIA_WindowPatternId, UIA_CONTROLTYPE_ID,
             },
             Input::KeyboardAndMouse::{
                 SendInput, INPUT, INPUT_0, INPUT_KEYBOARD, KEYBDINPUT, KEYBD_EVENT_FLAGS,
@@ -39,13 +44,6 @@ use windows::{
                 EnumWindows, GetWindowRect, GetWindowTextW, GetWindowThreadProcessId,
                 IsWindowVisible, SetForegroundWindow,
             },
-        },
-        Graphics::Gdi::{
-            CreatePen, DeleteObject, GetDC, ReleaseDC,
-            SelectObject, SetROP2, PS_SOLID, R2_NOTXORPEN,
-            BitBlt, CreateCompatibleBitmap, CreateCompatibleDC, DeleteDC,
-            GetDIBits, BITMAPINFO, BITMAPINFOHEADER, BI_RGB, DIB_RGB_COLORS,
-            SRCCOPY,
         },
     },
 };
@@ -79,7 +77,10 @@ impl WindowsUiBackend {
             let _ = CoInitializeEx(None, COINIT_MULTITHREADED);
             let automation: IUIAutomation =
                 CoCreateInstance(&CUIAutomation, None, CLSCTX_INPROC_SERVER)?;
-            Ok(Self { automation, registry: Arc::new(DashMap::new()) })
+            Ok(Self {
+                automation,
+                registry: Arc::new(DashMap::new()),
+            })
         }
     }
 
@@ -126,9 +127,7 @@ impl WindowsUiBackend {
     // ── Pattern helpers ───────────────────────────────────────────────────
 
     /// Collect all available patterns and build the `actions` list + state.
-    unsafe fn collect_patterns(
-        element: &IUIAutomationElement,
-    ) -> PatternInfo {
+    unsafe fn collect_patterns(element: &IUIAutomationElement) -> PatternInfo {
         let mut info = PatternInfo::default();
 
         // InvokePattern → "click"
@@ -140,22 +139,22 @@ impl WindowsUiBackend {
 
         // ValuePattern → "set-text"
         if let Ok(raw) = element.GetCurrentPattern(UIA_ValuePatternId) {
-            if let Ok(vp) =
-                windows::core::Interface::cast::<IUIAutomationValuePattern>(&raw)
-            {
+            if let Ok(vp) = windows::core::Interface::cast::<IUIAutomationValuePattern>(&raw) {
                 let read_only = vp.CurrentIsReadOnly().unwrap_or(BOOL(1)).as_bool();
                 if !read_only {
                     info.actions.push("set-text".into());
                 }
-                info.value = vp.CurrentValue().map(|b| b.to_string()).ok().filter(|s| !s.is_empty());
+                info.value = vp
+                    .CurrentValue()
+                    .map(|b| b.to_string())
+                    .ok()
+                    .filter(|s| !s.is_empty());
             }
         }
 
         // TogglePattern → "toggle" + toggle_state
         if let Ok(raw) = element.GetCurrentPattern(UIA_TogglePatternId) {
-            if let Ok(tp) =
-                windows::core::Interface::cast::<IUIAutomationTogglePattern>(&raw)
-            {
+            if let Ok(tp) = windows::core::Interface::cast::<IUIAutomationTogglePattern>(&raw) {
                 info.actions.push("toggle".into());
                 info.toggle_state = tp.CurrentToggleState().ok().map(|s| match s {
                     x if x == ToggleState_On => ToggleState::On,
@@ -203,9 +202,7 @@ impl WindowsUiBackend {
 
         // RangeValuePattern → "set-range" + range info
         if let Ok(raw) = element.GetCurrentPattern(UIA_RangeValuePatternId) {
-            if let Ok(rp) =
-                windows::core::Interface::cast::<IUIAutomationRangeValuePattern>(&raw)
-            {
+            if let Ok(rp) = windows::core::Interface::cast::<IUIAutomationRangeValuePattern>(&raw) {
                 let read_only = rp.CurrentIsReadOnly().unwrap_or(BOOL(1)).as_bool();
                 if !read_only {
                     info.actions.push("set-range".into());
@@ -236,25 +233,30 @@ impl WindowsUiBackend {
 
         // TextPattern → read rich text content
         if let Ok(raw) = element.GetCurrentPattern(UIA_TextPatternId) {
-            if let Ok(tp) =
-                windows::core::Interface::cast::<IUIAutomationTextPattern>(&raw)
-            {
+            if let Ok(tp) = windows::core::Interface::cast::<IUIAutomationTextPattern>(&raw) {
                 if let Ok(range) = tp.DocumentRange() {
-                    info.text_content =
-                        range.GetText(-1).map(|b| b.to_string()).ok().filter(|s| !s.is_empty());
+                    info.text_content = range
+                        .GetText(-1)
+                        .map(|b| b.to_string())
+                        .ok()
+                        .filter(|s| !s.is_empty());
                 }
             }
         }
 
         // Keyboard focusable → "focus"
-        info.is_keyboard_focusable =
-            element.CurrentIsKeyboardFocusable().unwrap_or(BOOL(0)).as_bool();
+        info.is_keyboard_focusable = element
+            .CurrentIsKeyboardFocusable()
+            .unwrap_or(BOOL(0))
+            .as_bool();
         if info.is_keyboard_focusable {
             info.actions.push("focus".into());
         }
 
         // Any focusable Edit or Custom can receive send-keys
-        let ctrl_id = element.CurrentControlType().unwrap_or(UIA_CONTROLTYPE_ID(0));
+        let ctrl_id = element
+            .CurrentControlType()
+            .unwrap_or(UIA_CONTROLTYPE_ID(0));
         if info.is_keyboard_focusable
             && matches!(
                 Self::control_type(ctrl_id),
@@ -279,7 +281,12 @@ impl WindowsUiBackend {
                 label: String::new(),
                 value: None,
                 text_content: None,
-                rect: Rect { x: 0, y: 0, width: 0, height: 0 },
+                rect: Rect {
+                    x: 0,
+                    y: 0,
+                    width: 0,
+                    height: 0,
+                },
                 enabled: false,
                 focused: false,
                 is_keyboard_focusable: false,
@@ -297,13 +304,21 @@ impl WindowsUiBackend {
         }
 
         unsafe {
-            let label = element.CurrentName().map(|b| b.to_string()).unwrap_or_default();
+            let label = element
+                .CurrentName()
+                .map(|b| b.to_string())
+                .unwrap_or_default();
 
-            let ctrl_id = element.CurrentControlType().unwrap_or(UIA_CONTROLTYPE_ID(0));
+            let ctrl_id = element
+                .CurrentControlType()
+                .unwrap_or(UIA_CONTROLTYPE_ID(0));
             let element_type = Self::control_type(ctrl_id);
 
             let enabled = element.CurrentIsEnabled().unwrap_or(BOOL(1)).as_bool();
-            let focused = element.CurrentHasKeyboardFocus().unwrap_or(BOOL(0)).as_bool();
+            let focused = element
+                .CurrentHasKeyboardFocus()
+                .unwrap_or(BOOL(0))
+                .as_bool();
 
             let automation_id = element
                 .CurrentAutomationId()
@@ -326,8 +341,12 @@ impl WindowsUiBackend {
             // CurrentKeyboardShortcut is not exposed in windows-rs 0.58
             let keyboard_shortcut: Option<String> = None;
 
-            let bounding =
-                element.CurrentBoundingRectangle().unwrap_or(RECT { left: 0, top: 0, right: 0, bottom: 0 });
+            let bounding = element.CurrentBoundingRectangle().unwrap_or(RECT {
+                left: 0,
+                top: 0,
+                right: 0,
+                bottom: 0,
+            });
             let rect = Rect {
                 x: bounding.left,
                 y: bounding.top,
@@ -354,7 +373,8 @@ impl WindowsUiBackend {
 
             // ── Register ──────────────────────────────────────────────────
             let oculos_id = Uuid::new_v4().to_string();
-            self.registry.insert(oculos_id.clone(), SafeElement(element));
+            self.registry
+                .insert(oculos_id.clone(), SafeElement(element));
 
             Ok(UiElement {
                 oculos_id,
@@ -384,11 +404,19 @@ impl WindowsUiBackend {
     /// Used for flat find results.
     fn build_flat(&self, element: IUIAutomationElement) -> Result<UiElement> {
         unsafe {
-            let label = element.CurrentName().map(|b| b.to_string()).unwrap_or_default();
-            let ctrl_id = element.CurrentControlType().unwrap_or(UIA_CONTROLTYPE_ID(0));
+            let label = element
+                .CurrentName()
+                .map(|b| b.to_string())
+                .unwrap_or_default();
+            let ctrl_id = element
+                .CurrentControlType()
+                .unwrap_or(UIA_CONTROLTYPE_ID(0));
             let element_type = Self::control_type(ctrl_id);
             let enabled = element.CurrentIsEnabled().unwrap_or(BOOL(1)).as_bool();
-            let focused = element.CurrentHasKeyboardFocus().unwrap_or(BOOL(0)).as_bool();
+            let focused = element
+                .CurrentHasKeyboardFocus()
+                .unwrap_or(BOOL(0))
+                .as_bool();
             let automation_id = element
                 .CurrentAutomationId()
                 .map(|b| b.to_string())
@@ -406,8 +434,12 @@ impl WindowsUiBackend {
                 .filter(|s| !s.is_empty());
             // CurrentKeyboardShortcut is not exposed in windows-rs 0.58
             let keyboard_shortcut: Option<String> = None;
-            let bounding =
-                element.CurrentBoundingRectangle().unwrap_or(RECT { left: 0, top: 0, right: 0, bottom: 0 });
+            let bounding = element.CurrentBoundingRectangle().unwrap_or(RECT {
+                left: 0,
+                top: 0,
+                right: 0,
+                bottom: 0,
+            });
             let rect = Rect {
                 x: bounding.left,
                 y: bounding.top,
@@ -416,7 +448,8 @@ impl WindowsUiBackend {
             };
             let pinfo = Self::collect_patterns(&element);
             let oculos_id = Uuid::new_v4().to_string();
-            self.registry.insert(oculos_id.clone(), SafeElement(element));
+            self.registry
+                .insert(oculos_id.clone(), SafeElement(element));
 
             Ok(UiElement {
                 oculos_id,
@@ -477,11 +510,16 @@ impl WindowsUiBackend {
 
         let mut results = Vec::new();
         for i in 0..count {
-            let Ok(raw_elem) = (unsafe { all_elements.GetElement(i) }) else { continue };
+            let Ok(raw_elem) = (unsafe { all_elements.GetElement(i) }) else {
+                continue;
+            };
 
             if let Some(wanted_type) = element_type {
-                let ctrl_id =
-                    unsafe { raw_elem.CurrentControlType().unwrap_or(UIA_CONTROLTYPE_ID(0)) };
+                let ctrl_id = unsafe {
+                    raw_elem
+                        .CurrentControlType()
+                        .unwrap_or(UIA_CONTROLTYPE_ID(0))
+                };
                 if &Self::control_type(ctrl_id) != wanted_type {
                     continue;
                 }
@@ -489,7 +527,11 @@ impl WindowsUiBackend {
 
             if let Some(ref q) = query_lower {
                 let label = unsafe {
-                    raw_elem.CurrentName().map(|b| b.to_string()).unwrap_or_default().to_lowercase()
+                    raw_elem
+                        .CurrentName()
+                        .map(|b| b.to_string())
+                        .unwrap_or_default()
+                        .to_lowercase()
                 };
                 let aid = unsafe {
                     raw_elem
@@ -503,7 +545,9 @@ impl WindowsUiBackend {
                 }
             }
 
-            let Ok(ui_elem) = self.build_flat(raw_elem) else { continue };
+            let Ok(ui_elem) = self.build_flat(raw_elem) else {
+                continue;
+            };
 
             if interactive_only && ui_elem.actions.is_empty() {
                 continue;
@@ -632,8 +676,7 @@ impl UiBackend for WindowsUiBackend {
         let elem = self.find_element(oculos_id)?;
         unsafe {
             if let Ok(raw) = elem.GetCurrentPattern(UIA_InvokePatternId) {
-                let inv: IUIAutomationInvokePattern =
-                    windows::core::Interface::cast(&raw)?;
+                let inv: IUIAutomationInvokePattern = windows::core::Interface::cast(&raw)?;
                 inv.Invoke()?;
                 return Ok(());
             }
@@ -689,8 +732,7 @@ impl UiBackend for WindowsUiBackend {
             let raw = elem
                 .GetCurrentPattern(UIA_ExpandCollapsePatternId)
                 .context("Element does not support ExpandCollapsePattern")?;
-            let ep: IUIAutomationExpandCollapsePattern =
-                windows::core::Interface::cast(&raw)?;
+            let ep: IUIAutomationExpandCollapsePattern = windows::core::Interface::cast(&raw)?;
             ep.Expand()?;
         }
         Ok(())
@@ -702,8 +744,7 @@ impl UiBackend for WindowsUiBackend {
             let raw = elem
                 .GetCurrentPattern(UIA_ExpandCollapsePatternId)
                 .context("Element does not support ExpandCollapsePattern")?;
-            let ep: IUIAutomationExpandCollapsePattern =
-                windows::core::Interface::cast(&raw)?;
+            let ep: IUIAutomationExpandCollapsePattern = windows::core::Interface::cast(&raw)?;
             ep.Collapse()?;
         }
         Ok(())
@@ -715,8 +756,7 @@ impl UiBackend for WindowsUiBackend {
             let raw = elem
                 .GetCurrentPattern(UIA_SelectionItemPatternId)
                 .context("Element does not support SelectionItemPattern")?;
-            let sp: IUIAutomationSelectionItemPattern =
-                windows::core::Interface::cast(&raw)?;
+            let sp: IUIAutomationSelectionItemPattern = windows::core::Interface::cast(&raw)?;
             sp.Select()?;
         }
         Ok(())
@@ -728,8 +768,7 @@ impl UiBackend for WindowsUiBackend {
             let raw = elem
                 .GetCurrentPattern(UIA_RangeValuePatternId)
                 .context("Element does not support RangeValuePattern")?;
-            let rp: IUIAutomationRangeValuePattern =
-                windows::core::Interface::cast(&raw)?;
+            let rp: IUIAutomationRangeValuePattern = windows::core::Interface::cast(&raw)?;
             rp.SetValue(value)?;
         }
         Ok(())
@@ -751,9 +790,9 @@ impl UiBackend for WindowsUiBackend {
                 "page-down" => (ScrollAmount_NoAmount, ScrollAmount_LargeIncrement),
                 other => {
                     return Err(anyhow!(
-                        "Unknown scroll direction '{}'. Use: up, down, left, right, page-up, page-down",
-                        other
-                    ))
+                    "Unknown scroll direction '{}'. Use: up, down, left, right, page-up, page-down",
+                    other
+                ))
                 }
             };
             sp.Scroll(h, v)?;
@@ -801,9 +840,7 @@ impl UiBackend for WindowsUiBackend {
 
     fn highlight_element(&self, oculos_id: &str, duration_ms: u64) -> Result<Rect> {
         let elem = self.find_element(oculos_id)?;
-        let r = unsafe {
-            elem.CurrentBoundingRectangle()?
-        };
+        let r = unsafe { elem.CurrentBoundingRectangle()? };
 
         let rect = Rect {
             x: r.left,
@@ -819,10 +856,8 @@ impl UiBackend for WindowsUiBackend {
         let h = r.bottom - r.top;
         let dur = duration_ms.min(5000); // cap at 5 seconds
 
-        std::thread::spawn(move || {
-            unsafe {
-                draw_highlight_rect(x, y, w, h, dur);
-            }
+        std::thread::spawn(move || unsafe {
+            draw_highlight_rect(x, y, w, h, dur);
         });
 
         Ok(rect)
@@ -919,7 +954,9 @@ fn send_key_sequence(text: &str) {
         if ch == '{' {
             let mut name = String::new();
             for c in iter.by_ref() {
-                if c == '}' { break; }
+                if c == '}' {
+                    break;
+                }
                 name.push(c);
             }
             dispatch_special(&name.to_uppercase());
@@ -932,25 +969,31 @@ fn send_key_sequence(text: &str) {
 fn dispatch_special(name: &str) {
     match name {
         "ENTER" | "RETURN" => send_vk(0x0D),
-        "TAB"              => send_vk(0x09),
-        "ESC" | "ESCAPE"   => send_vk(0x1B),
+        "TAB" => send_vk(0x09),
+        "ESC" | "ESCAPE" => send_vk(0x1B),
         "BACKSPACE" | "BS" => send_vk(0x08),
-        "DELETE" | "DEL"   => send_vk(0x2E),
-        "HOME"             => send_vk(0x24),
-        "END"              => send_vk(0x23),
-        "LEFT"             => send_vk(0x25),
-        "RIGHT"            => send_vk(0x27),
-        "UP"               => send_vk(0x26),
-        "DOWN"             => send_vk(0x28),
-        "PGUP"             => send_vk(0x21),
-        "PGDN"             => send_vk(0x22),
-        "WIN"              => send_vk(0x5B),
-        "F1"  => send_vk(0x70), "F2"  => send_vk(0x71),
-        "F3"  => send_vk(0x72), "F4"  => send_vk(0x73),
-        "F5"  => send_vk(0x74), "F6"  => send_vk(0x75),
-        "F7"  => send_vk(0x76), "F8"  => send_vk(0x77),
-        "F9"  => send_vk(0x78), "F10" => send_vk(0x79),
-        "F11" => send_vk(0x7A), "F12" => send_vk(0x7B),
+        "DELETE" | "DEL" => send_vk(0x2E),
+        "HOME" => send_vk(0x24),
+        "END" => send_vk(0x23),
+        "LEFT" => send_vk(0x25),
+        "RIGHT" => send_vk(0x27),
+        "UP" => send_vk(0x26),
+        "DOWN" => send_vk(0x28),
+        "PGUP" => send_vk(0x21),
+        "PGDN" => send_vk(0x22),
+        "WIN" => send_vk(0x5B),
+        "F1" => send_vk(0x70),
+        "F2" => send_vk(0x71),
+        "F3" => send_vk(0x72),
+        "F4" => send_vk(0x73),
+        "F5" => send_vk(0x74),
+        "F6" => send_vk(0x75),
+        "F7" => send_vk(0x76),
+        "F8" => send_vk(0x77),
+        "F9" => send_vk(0x78),
+        "F10" => send_vk(0x79),
+        "F11" => send_vk(0x7A),
+        "F12" => send_vk(0x7B),
         // Modifier combos  ── CTRL+key
         chord if chord.starts_with("CTRL+") => {
             let key = chord.trim_start_matches("CTRL+");
@@ -980,13 +1023,19 @@ fn char_to_vk(s: &str) -> u16 {
         return c as u16; // A–Z and 0–9 map directly to VK codes
     }
     match s {
-        "F4" => 0x73, "F5" => 0x74, _ => 0x00,
+        "F4" => 0x73,
+        "F5" => 0x74,
+        _ => 0x00,
     }
 }
 
 /// Send a virtual key down + up (for special keys, no unicode flag).
 unsafe fn send_vk_raw(vk: u16, key_up: bool) {
-    let flags = if key_up { KEYEVENTF_KEYUP } else { KEYBD_EVENT_FLAGS(0) };
+    let flags = if key_up {
+        KEYEVENTF_KEYUP
+    } else {
+        KEYBD_EVENT_FLAGS(0)
+    };
     let input = INPUT {
         r#type: INPUT_KEYBOARD,
         Anonymous: INPUT_0 {
@@ -1012,8 +1061,12 @@ fn send_vk(vk: u16) {
 /// Send a modifier + key chord (e.g. Ctrl+A).
 fn send_chord(vks: &[u16]) {
     unsafe {
-        for &vk in vks         { send_vk_raw(vk, false); } // press all down
-        for &vk in vks.iter().rev() { send_vk_raw(vk, true); }  // release in reverse
+        for &vk in vks {
+            send_vk_raw(vk, false);
+        } // press all down
+        for &vk in vks.iter().rev() {
+            send_vk_raw(vk, true);
+        } // release in reverse
     }
 }
 
@@ -1056,8 +1109,14 @@ fn send_unicode(ch: char) {
 // ─────────────────────────────────────────────────────────────────────────────
 
 fn find_main_window(target_pid: u32) -> Option<HWND> {
-    struct FindData { pid: u32, result: Option<HWND> }
-    let mut data = FindData { pid: target_pid, result: None };
+    struct FindData {
+        pid: u32,
+        result: Option<HWND>,
+    }
+    let mut data = FindData {
+        pid: target_pid,
+        result: None,
+    };
     let ptr = &mut data as *mut FindData as isize;
 
     unsafe extern "system" fn callback(hwnd: HWND, lparam: LPARAM) -> BOOL {
@@ -1074,7 +1133,9 @@ fn find_main_window(target_pid: u32) -> Option<HWND> {
         BOOL(1)
     }
 
-    unsafe { let _ = EnumWindows(Some(callback), LPARAM(ptr)); }
+    unsafe {
+        let _ = EnumWindows(Some(callback), LPARAM(ptr));
+    }
     data.result
 }
 
@@ -1090,13 +1151,21 @@ unsafe fn draw_highlight_rect(x: i32, y: i32, w: i32, h: i32, duration_ms: u64) 
 
     // --- Draw phase ---
     let hdc = GetDC(HWND::default());
-    if hdc.is_invalid() { return; }
+    if hdc.is_invalid() {
+        return;
+    }
 
     let old_pen = SelectObject(hdc, pen);
     let old_brush = SelectObject(hdc, GetStockObject(NULL_BRUSH));
     SetROP2(hdc, R2_NOTXORPEN);
 
-    windows::Win32::Graphics::Gdi::Rectangle(hdc, x - thickness, y - thickness, x + w + thickness, y + h + thickness);
+    windows::Win32::Graphics::Gdi::Rectangle(
+        hdc,
+        x - thickness,
+        y - thickness,
+        x + w + thickness,
+        y + h + thickness,
+    );
 
     SelectObject(hdc, old_pen);
     SelectObject(hdc, old_brush);
@@ -1107,13 +1176,22 @@ unsafe fn draw_highlight_rect(x: i32, y: i32, w: i32, h: i32, duration_ms: u64) 
 
     // --- Erase phase (XOR again cancels the drawing) ---
     let hdc = GetDC(HWND::default());
-    if hdc.is_invalid() { let _ = DeleteObject(pen); return; }
+    if hdc.is_invalid() {
+        let _ = DeleteObject(pen);
+        return;
+    }
 
     let old_pen = SelectObject(hdc, pen);
     let old_brush = SelectObject(hdc, GetStockObject(NULL_BRUSH));
     SetROP2(hdc, R2_NOTXORPEN);
 
-    windows::Win32::Graphics::Gdi::Rectangle(hdc, x - thickness, y - thickness, x + w + thickness, y + h + thickness);
+    windows::Win32::Graphics::Gdi::Rectangle(
+        hdc,
+        x - thickness,
+        y - thickness,
+        x + w + thickness,
+        y + h + thickness,
+    );
 
     SelectObject(hdc, old_pen);
     SelectObject(hdc, old_brush);

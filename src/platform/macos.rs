@@ -181,17 +181,28 @@ impl MacOsUiBackend {
 
     // ── Build element ─────────────────────────────────────────────────────
 
-    fn build_element(&self, element: &AXUIElement, with_children: bool, depth: u32) -> Result<UiElement> {
+    fn build_element(
+        &self,
+        element: &AXUIElement,
+        with_children: bool,
+        depth: u32,
+    ) -> Result<UiElement> {
         if depth > 48 {
             let id = Uuid::new_v4().to_string();
-            self.registry.insert(id.clone(), SafeElement(element.clone()));
+            self.registry
+                .insert(id.clone(), SafeElement(element.clone()));
             return Ok(UiElement {
                 oculos_id: id,
                 element_type: ElementType::Unknown,
                 label: String::new(),
                 value: None,
                 text_content: None,
-                rect: Rect { x: 0, y: 0, width: 0, height: 0 },
+                rect: Rect {
+                    x: 0,
+                    y: 0,
+                    width: 0,
+                    height: 0,
+                },
                 enabled: false,
                 focused: false,
                 is_keyboard_focusable: false,
@@ -225,7 +236,12 @@ impl MacOsUiBackend {
         // Position & size
         let (x, y) = Self::get_position(element);
         let (width, height) = Self::get_size(element);
-        let rect = Rect { x, y, width, height };
+        let rect = Rect {
+            x,
+            y,
+            width,
+            height,
+        };
 
         // Toggle state (for checkboxes)
         let toggle_state = if element_type == ElementType::CheckBox {
@@ -321,10 +337,8 @@ impl MacOsUiBackend {
                 // We extract x, y from the CFType
                 let desc = format!("{:?}", v);
                 // Parse "x:NNN y:NNN" from debug repr as fallback
-                let x = Self::get_number_attr(element, "AXPosition.x")
-                    .unwrap_or(0.0) as i32;
-                let y = Self::get_number_attr(element, "AXPosition.y")
-                    .unwrap_or(0.0) as i32;
+                let x = Self::get_number_attr(element, "AXPosition.x").unwrap_or(0.0) as i32;
+                let y = Self::get_number_attr(element, "AXPosition.y").unwrap_or(0.0) as i32;
                 (x, y)
             })
             .unwrap_or((0, 0))
@@ -335,10 +349,8 @@ impl MacOsUiBackend {
             .attribute(&AXAttribute::new(&CFString::new("AXSize")))
             .ok()
             .map(|_| {
-                let w = Self::get_number_attr(element, "AXSize.w")
-                    .unwrap_or(0.0) as i32;
-                let h = Self::get_number_attr(element, "AXSize.h")
-                    .unwrap_or(0.0) as i32;
+                let w = Self::get_number_attr(element, "AXSize.w").unwrap_or(0.0) as i32;
+                let h = Self::get_number_attr(element, "AXSize.h").unwrap_or(0.0) as i32;
                 (w, h)
             })
             .unwrap_or((0, 0))
@@ -409,7 +421,14 @@ impl MacOsUiBackend {
         }
 
         for child in Self::get_children(root) {
-            self.search_elements(&child, query, element_type, interactive_only, results, depth + 1);
+            self.search_elements(
+                &child,
+                query,
+                element_type,
+                interactive_only,
+                results,
+                depth + 1,
+            );
         }
     }
 }
@@ -423,10 +442,9 @@ impl UiBackend for MacOsUiBackend {
         use core_foundation::number::CFNumber;
         use core_foundation::string::CFString;
         use core_graphics::window::{
-            kCGNullWindowID, kCGWindowListExcludeDesktopElements,
-            kCGWindowListOptionOnScreenOnly, kCGWindowLayer, kCGWindowName,
-            kCGWindowNumber, kCGWindowOwnerName, kCGWindowOwnerPID,
-            CGWindowListCopyWindowInfo,
+            kCGNullWindowID, kCGWindowLayer, kCGWindowListExcludeDesktopElements,
+            kCGWindowListOptionOnScreenOnly, kCGWindowName, kCGWindowNumber, kCGWindowOwnerName,
+            kCGWindowOwnerPID, CGWindowListCopyWindowInfo,
         };
 
         let mut windows = Vec::new();
@@ -441,8 +459,8 @@ impl UiBackend for MacOsUiBackend {
 
         for i in 0..count {
             unsafe {
-                let dict_ref = core_foundation::array::CFArrayGetValueAtIndex(array_ref, i)
-                    as CFDictionaryRef;
+                let dict_ref =
+                    core_foundation::array::CFArrayGetValueAtIndex(array_ref, i) as CFDictionaryRef;
                 if dict_ref.is_null() {
                     continue;
                 }
@@ -476,7 +494,9 @@ impl UiBackend for MacOsUiBackend {
                 // Extract layer — skip windows on non-standard layers
                 let layer_val = get_val(kCGWindowLayer as CFTypeRef);
                 let layer = if !layer_val.is_null() {
-                    CFNumber::wrap_under_get_rule(layer_val as _).to_i64().unwrap_or(0)
+                    CFNumber::wrap_under_get_rule(layer_val as _)
+                        .to_i64()
+                        .unwrap_or(0)
                 } else {
                     0
                 };
@@ -512,7 +532,9 @@ impl UiBackend for MacOsUiBackend {
                 // Extract window number as pseudo-hwnd
                 let num_val = get_val(kCGWindowNumber as CFTypeRef);
                 let window_number = if !num_val.is_null() {
-                    CFNumber::wrap_under_get_rule(num_val as _).to_i64().unwrap_or(0) as usize
+                    CFNumber::wrap_under_get_rule(num_val as _)
+                        .to_i64()
+                        .unwrap_or(0) as usize
                 } else {
                     0
                 };
@@ -522,7 +544,12 @@ impl UiBackend for MacOsUiBackend {
                     hwnd: window_number,
                     title,
                     exe_name: owner_name,
-                    rect: Rect { x: 0, y: 0, width: 0, height: 0 },
+                    rect: Rect {
+                        x: 0,
+                        y: 0,
+                        width: 0,
+                        height: 0,
+                    },
                     visible: true,
                 });
             }
@@ -667,15 +694,8 @@ impl UiBackend for MacOsUiBackend {
 
             let source = CGEventSource::new(CGEventSourceStateID::HIDSystemState)
                 .map_err(|_| anyhow!("Failed to create CGEventSource"))?;
-            let event = CGEvent::new_scroll_event(
-                source,
-                ScrollEventUnit::LINE,
-                2,
-                dy,
-                dx,
-                0,
-            )
-            .map_err(|_| anyhow!("Failed to create scroll event"))?;
+            let event = CGEvent::new_scroll_event(source, ScrollEventUnit::LINE, 2, dy, dx, 0)
+                .map_err(|_| anyhow!("Failed to create scroll event"))?;
             event.post(core_graphics::event::CGEventTapLocation::HID);
         }
 
@@ -777,10 +797,7 @@ fn send_key_sequence_macos(text: &str) {
     }
 }
 
-fn send_special_key_macos(
-    source: &core_graphics::event_source::CGEventSource,
-    key_name: &str,
-) {
+fn send_special_key_macos(source: &core_graphics::event_source::CGEventSource, key_name: &str) {
     use core_graphics::event::{CGEvent, CGEventFlags, CGKeyCode};
 
     let (keycode, flags): (CGKeyCode, CGEventFlags) = match key_name {
@@ -842,16 +859,42 @@ fn send_special_key_macos(
 
 fn char_to_macos_keycode(c: char) -> u16 {
     match c {
-        'a' => 0x00, 'b' => 0x0B, 'c' => 0x08, 'd' => 0x02,
-        'e' => 0x0E, 'f' => 0x03, 'g' => 0x05, 'h' => 0x04,
-        'i' => 0x22, 'j' => 0x26, 'k' => 0x28, 'l' => 0x25,
-        'm' => 0x2E, 'n' => 0x2D, 'o' => 0x1F, 'p' => 0x23,
-        'q' => 0x0C, 'r' => 0x0F, 's' => 0x01, 't' => 0x11,
-        'u' => 0x20, 'v' => 0x09, 'w' => 0x0D, 'x' => 0x07,
-        'y' => 0x10, 'z' => 0x06,
-        '0' => 0x1D, '1' => 0x12, '2' => 0x13, '3' => 0x14,
-        '4' => 0x15, '5' => 0x17, '6' => 0x16, '7' => 0x1A,
-        '8' => 0x1C, '9' => 0x19,
+        'a' => 0x00,
+        'b' => 0x0B,
+        'c' => 0x08,
+        'd' => 0x02,
+        'e' => 0x0E,
+        'f' => 0x03,
+        'g' => 0x05,
+        'h' => 0x04,
+        'i' => 0x22,
+        'j' => 0x26,
+        'k' => 0x28,
+        'l' => 0x25,
+        'm' => 0x2E,
+        'n' => 0x2D,
+        'o' => 0x1F,
+        'p' => 0x23,
+        'q' => 0x0C,
+        'r' => 0x0F,
+        's' => 0x01,
+        't' => 0x11,
+        'u' => 0x20,
+        'v' => 0x09,
+        'w' => 0x0D,
+        'x' => 0x07,
+        'y' => 0x10,
+        'z' => 0x06,
+        '0' => 0x1D,
+        '1' => 0x12,
+        '2' => 0x13,
+        '3' => 0x14,
+        '4' => 0x15,
+        '5' => 0x17,
+        '6' => 0x16,
+        '7' => 0x1A,
+        '8' => 0x1C,
+        '9' => 0x19,
         _ => 0x00,
     }
 }

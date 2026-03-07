@@ -56,9 +56,8 @@ async fn main() -> Result<()> {
 
     // ── Platform backend ──────────────────────────────────────────────────────
     info!("Initialising platform UI backend…");
-    let backend: Arc<dyn UiBackend> = Arc::new(
-        PlatformBackend::new().expect("Failed to initialise UI Automation backend"),
-    );
+    let backend: Arc<dyn UiBackend> =
+        Arc::new(PlatformBackend::new().expect("Failed to initialise UI Automation backend"));
     info!("Backend ready.");
 
     // ── MCP mode ──────────────────────────────────────────────────────────────

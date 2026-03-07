@@ -7,8 +7,11 @@ use serde_json::{json, Value};
 use tokio::task;
 
 use crate::{
-    api::{AppState, ws::WsEvent},
-    types::{ApiResponse, HighlightPayload, ScrollPayload, SendKeysPayload, SetRangePayload, SetTextPayload},
+    api::{ws::WsEvent, AppState},
+    types::{
+        ApiResponse, HighlightPayload, ScrollPayload, SendKeysPayload, SetRangePayload,
+        SetTextPayload,
+    },
 };
 
 // ── Basic interactions ────────────────────────────────────────────────────────
@@ -20,8 +23,15 @@ pub async fn click(
 ) -> Result<Json<ApiResponse<Value>>, Err> {
     let b = s.backend.clone();
     let id2 = id.clone();
-    task::spawn_blocking(move || b.click_element(&id2)).await.map_err(e)?.map_err(e)?;
-    let _ = s.ws_tx.send(WsEvent::Action { action: "click".into(), element_id: id, success: true });
+    task::spawn_blocking(move || b.click_element(&id2))
+        .await
+        .map_err(e)?
+        .map_err(e)?;
+    let _ = s.ws_tx.send(WsEvent::Action {
+        action: "click".into(),
+        element_id: id,
+        success: true,
+    });
     Ok(Json(ApiResponse::ok(json!({ "action": "click" }))))
 }
 
@@ -33,8 +43,15 @@ pub async fn set_text(
 ) -> Result<Json<ApiResponse<Value>>, Err> {
     let b = s.backend.clone();
     let id2 = id.clone();
-    task::spawn_blocking(move || b.set_text(&id2, &p.text)).await.map_err(e)?.map_err(e)?;
-    let _ = s.ws_tx.send(WsEvent::Action { action: "set-text".into(), element_id: id, success: true });
+    task::spawn_blocking(move || b.set_text(&id2, &p.text))
+        .await
+        .map_err(e)?
+        .map_err(e)?;
+    let _ = s.ws_tx.send(WsEvent::Action {
+        action: "set-text".into(),
+        element_id: id,
+        success: true,
+    });
     Ok(Json(ApiResponse::ok(json!({ "action": "set-text" }))))
 }
 
@@ -46,8 +63,15 @@ pub async fn send_keys(
 ) -> Result<Json<ApiResponse<Value>>, Err> {
     let b = s.backend.clone();
     let id2 = id.clone();
-    task::spawn_blocking(move || b.send_keys(&id2, &p.keys)).await.map_err(e)?.map_err(e)?;
-    let _ = s.ws_tx.send(WsEvent::Action { action: "send-keys".into(), element_id: id, success: true });
+    task::spawn_blocking(move || b.send_keys(&id2, &p.keys))
+        .await
+        .map_err(e)?
+        .map_err(e)?;
+    let _ = s.ws_tx.send(WsEvent::Action {
+        action: "send-keys".into(),
+        element_id: id,
+        success: true,
+    });
     Ok(Json(ApiResponse::ok(json!({ "action": "send-keys" }))))
 }
 
@@ -58,8 +82,15 @@ pub async fn focus(
 ) -> Result<Json<ApiResponse<Value>>, Err> {
     let b = s.backend.clone();
     let id2 = id.clone();
-    task::spawn_blocking(move || b.focus_element(&id2)).await.map_err(e)?.map_err(e)?;
-    let _ = s.ws_tx.send(WsEvent::Action { action: "focus".into(), element_id: id, success: true });
+    task::spawn_blocking(move || b.focus_element(&id2))
+        .await
+        .map_err(e)?
+        .map_err(e)?;
+    let _ = s.ws_tx.send(WsEvent::Action {
+        action: "focus".into(),
+        element_id: id,
+        success: true,
+    });
     Ok(Json(ApiResponse::ok(json!({ "action": "focus" }))))
 }
 
@@ -72,8 +103,15 @@ pub async fn toggle(
 ) -> Result<Json<ApiResponse<Value>>, Err> {
     let b = s.backend.clone();
     let id2 = id.clone();
-    task::spawn_blocking(move || b.toggle_element(&id2)).await.map_err(e)?.map_err(e)?;
-    let _ = s.ws_tx.send(WsEvent::Action { action: "toggle".into(), element_id: id, success: true });
+    task::spawn_blocking(move || b.toggle_element(&id2))
+        .await
+        .map_err(e)?
+        .map_err(e)?;
+    let _ = s.ws_tx.send(WsEvent::Action {
+        action: "toggle".into(),
+        element_id: id,
+        success: true,
+    });
     Ok(Json(ApiResponse::ok(json!({ "action": "toggle" }))))
 }
 
@@ -84,8 +122,15 @@ pub async fn expand(
 ) -> Result<Json<ApiResponse<Value>>, Err> {
     let b = s.backend.clone();
     let id2 = id.clone();
-    task::spawn_blocking(move || b.expand_element(&id2)).await.map_err(e)?.map_err(e)?;
-    let _ = s.ws_tx.send(WsEvent::Action { action: "expand".into(), element_id: id, success: true });
+    task::spawn_blocking(move || b.expand_element(&id2))
+        .await
+        .map_err(e)?
+        .map_err(e)?;
+    let _ = s.ws_tx.send(WsEvent::Action {
+        action: "expand".into(),
+        element_id: id,
+        success: true,
+    });
     Ok(Json(ApiResponse::ok(json!({ "action": "expand" }))))
 }
 
@@ -96,8 +141,15 @@ pub async fn collapse(
 ) -> Result<Json<ApiResponse<Value>>, Err> {
     let b = s.backend.clone();
     let id2 = id.clone();
-    task::spawn_blocking(move || b.collapse_element(&id2)).await.map_err(e)?.map_err(e)?;
-    let _ = s.ws_tx.send(WsEvent::Action { action: "collapse".into(), element_id: id, success: true });
+    task::spawn_blocking(move || b.collapse_element(&id2))
+        .await
+        .map_err(e)?
+        .map_err(e)?;
+    let _ = s.ws_tx.send(WsEvent::Action {
+        action: "collapse".into(),
+        element_id: id,
+        success: true,
+    });
     Ok(Json(ApiResponse::ok(json!({ "action": "collapse" }))))
 }
 
@@ -108,8 +160,15 @@ pub async fn select(
 ) -> Result<Json<ApiResponse<Value>>, Err> {
     let b = s.backend.clone();
     let id2 = id.clone();
-    task::spawn_blocking(move || b.select_element(&id2)).await.map_err(e)?.map_err(e)?;
-    let _ = s.ws_tx.send(WsEvent::Action { action: "select".into(), element_id: id, success: true });
+    task::spawn_blocking(move || b.select_element(&id2))
+        .await
+        .map_err(e)?
+        .map_err(e)?;
+    let _ = s.ws_tx.send(WsEvent::Action {
+        action: "select".into(),
+        element_id: id,
+        success: true,
+    });
     Ok(Json(ApiResponse::ok(json!({ "action": "select" }))))
 }
 
@@ -120,8 +179,13 @@ pub async fn set_range(
     Json(p): Json<SetRangePayload>,
 ) -> Result<Json<ApiResponse<Value>>, Err> {
     let b = s.backend.clone();
-    task::spawn_blocking(move || b.set_range(&id, p.value)).await.map_err(e)?.map_err(e)?;
-    Ok(Json(ApiResponse::ok(json!({ "action": "set-range", "value": p.value }))))
+    task::spawn_blocking(move || b.set_range(&id, p.value))
+        .await
+        .map_err(e)?
+        .map_err(e)?;
+    Ok(Json(ApiResponse::ok(
+        json!({ "action": "set-range", "value": p.value }),
+    )))
 }
 
 /// POST /interact/:id/scroll  body: { "direction": "down" }
@@ -132,8 +196,13 @@ pub async fn scroll(
 ) -> Result<Json<ApiResponse<Value>>, Err> {
     let b = s.backend.clone();
     let dir = p.direction.clone();
-    task::spawn_blocking(move || b.scroll_element(&id, &dir)).await.map_err(e)?.map_err(e)?;
-    Ok(Json(ApiResponse::ok(json!({ "action": "scroll", "direction": p.direction }))))
+    task::spawn_blocking(move || b.scroll_element(&id, &dir))
+        .await
+        .map_err(e)?
+        .map_err(e)?;
+    Ok(Json(ApiResponse::ok(
+        json!({ "action": "scroll", "direction": p.direction }),
+    )))
 }
 
 /// POST /interact/:id/scroll-into-view
@@ -142,8 +211,13 @@ pub async fn scroll_into_view(
     Path(id): Path<String>,
 ) -> Result<Json<ApiResponse<Value>>, Err> {
     let b = s.backend.clone();
-    task::spawn_blocking(move || b.scroll_into_view(&id)).await.map_err(e)?.map_err(e)?;
-    Ok(Json(ApiResponse::ok(json!({ "action": "scroll-into-view" }))))
+    task::spawn_blocking(move || b.scroll_into_view(&id))
+        .await
+        .map_err(e)?
+        .map_err(e)?;
+    Ok(Json(ApiResponse::ok(
+        json!({ "action": "scroll-into-view" }),
+    )))
 }
 
 /// POST /interact/:id/highlight  body (optional): { "duration_ms": 2000 }
@@ -154,8 +228,13 @@ pub async fn highlight(
 ) -> Result<Json<ApiResponse<Value>>, Err> {
     let dur = body.map(|b| b.duration_ms).unwrap_or(2000);
     let b = s.backend.clone();
-    let rect = task::spawn_blocking(move || b.highlight_element(&id, dur)).await.map_err(e)?.map_err(e)?;
-    Ok(Json(ApiResponse::ok(json!({ "action": "highlight", "rect": { "x": rect.x, "y": rect.y, "width": rect.width, "height": rect.height } }))))
+    let rect = task::spawn_blocking(move || b.highlight_element(&id, dur))
+        .await
+        .map_err(e)?
+        .map_err(e)?;
+    Ok(Json(ApiResponse::ok(
+        json!({ "action": "highlight", "rect": { "x": rect.x, "y": rect.y, "width": rect.width, "height": rect.height } }),
+    )))
 }
 
 // ── Batch operations ──────────────────────────────────────────────────────────

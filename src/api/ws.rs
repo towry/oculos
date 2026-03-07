@@ -38,10 +38,7 @@ pub fn create_broadcast() -> WsBroadcast {
 }
 
 /// GET /ws — upgrade to WebSocket
-pub async fn ws_handler(
-    ws: WebSocketUpgrade,
-    State(s): State<AppState>,
-) -> impl IntoResponse {
+pub async fn ws_handler(ws: WebSocketUpgrade, State(s): State<AppState>) -> impl IntoResponse {
     ws.on_upgrade(move |socket| handle_socket(socket, s))
 }
 

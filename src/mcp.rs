@@ -46,7 +46,12 @@ struct RpcError {
 }
 
 fn rpc_ok(id: Value, result: Value) -> RpcResponse {
-    RpcResponse { jsonrpc: "2.0", id, result: Some(result), error: None }
+    RpcResponse {
+        jsonrpc: "2.0",
+        id,
+        result: Some(result),
+        error: None,
+    }
 }
 
 fn rpc_err(id: Value, code: i32, msg: impl Into<String>) -> RpcResponse {
@@ -54,7 +59,10 @@ fn rpc_err(id: Value, code: i32, msg: impl Into<String>) -> RpcResponse {
         jsonrpc: "2.0",
         id,
         result: None,
-        error: Some(RpcError { code, message: msg.into() }),
+        error: Some(RpcError {
+            code,
+            message: msg.into(),
+        }),
     }
 }
 
@@ -99,7 +107,10 @@ fn dispatch(backend: &Arc<dyn UiBackend>, req: RpcRequest) -> Result<RpcResponse
     let p = &req.params;
 
     // Notifications (no id, no response needed — but clients may send them)
-    if matches!(req.method.as_str(), "notifications/initialized" | "notifications/cancelled") {
+    if matches!(
+        req.method.as_str(),
+        "notifications/initialized" | "notifications/cancelled"
+    ) {
         return Ok(rpc_ok(Value::Null, Value::Null));
     }
 
@@ -119,7 +130,8 @@ fn dispatch(backend: &Arc<dyn UiBackend>, req: RpcRequest) -> Result<RpcResponse
 
         // ── Tool invocation ───────────────────────────────────────────────────
         "tools/call" => {
-            let name = p["name"].as_str()
+            let name = p["name"]
+                .as_str()
                 .ok_or_else(|| anyhow::anyhow!("missing 'name' in tools/call params"))?;
             let args = &p["arguments"];
             let text = call_tool(backend, name, args)?;
@@ -137,44 +149,65 @@ fn dispatch(backend: &Arc<dyn UiBackend>, req: RpcRequest) -> Result<RpcResponse
 fn call_tool(backend: &Arc<dyn UiBackend>, name: &str, args: &Value) -> Result<String> {
     let v: Value = match name {
         // ── Discovery ─────────────────────────────────────────────────────────
-        "list_windows" => {
-            serde_json::to_value(backend.list_windows()?)?
-        }
+        "list_windows" => serde_json::to_value(backend.list_windows()?)?,
 
-        "get_ui_tree" => {
-            serde_json::to_value(backend.get_ui_tree(need_pid(args)?)?)?
-        }
+        "get_ui_tree" => serde_json::to_value(backend.get_ui_tree(need_pid(args)?)?)?,
 
-        "get_ui_tree_hwnd" => {
-            serde_json::to_value(backend.get_ui_tree_hwnd(need_hwnd(args)?)?)?
-        }
+        "get_ui_tree_hwnd" => serde_json::to_value(backend.get_ui_tree_hwnd(need_hwnd(args)?)?)?,
 
         "find_elements" => {
-            let q  = str_opt(args, "query");
+            let q = str_opt(args, "query");
             let et = et_opt(args);
-            let i  = args["interactive_only"].as_bool().unwrap_or(false);
+            let i = args["interactive_only"].as_bool().unwrap_or(false);
             serde_json::to_value(backend.find_elements(
-                need_pid(args)?, q.as_deref(), et.as_ref(), i,
+                need_pid(args)?,
+                q.as_deref(),
+                et.as_ref(),
+                i,
             )?)?
         }
 
         "find_elements_hwnd" => {
-            let q  = str_opt(args, "query");
+            let q = str_opt(args, "query");
             let et = et_opt(args);
-            let i  = args["interactive_only"].as_bool().unwrap_or(false);
+            let i = args["interactive_only"].as_bool().unwrap_or(false);
             serde_json::to_value(backend.find_elements_hwnd(
-                need_hwnd(args)?, q.as_deref(), et.as_ref(), i,
+                need_hwnd(args)?,
+                q.as_deref(),
+                et.as_ref(),
+                i,
             )?)?
         }
 
         // ── Element actions ───────────────────────────────────────────────────
-        "click_element"    => { backend.click_element(&need_id(args)?)?;    json!("ok") }
-        "focus_element"    => { backend.focus_element(&need_id(args)?)?;    json!("ok") }
-        "toggle_element"   => { backend.toggle_element(&need_id(args)?)?;   json!("ok") }
-        "expand_element"   => { backend.expand_element(&need_id(args)?)?;   json!("ok") }
-        "collapse_element" => { backend.collapse_element(&need_id(args)?)?; json!("ok") }
-        "select_element"   => { backend.select_element(&need_id(args)?)?;   json!("ok") }
-        "scroll_into_view" => { backend.scroll_into_view(&need_id(args)?)?; json!("ok") }
+        "click_element" => {
+            backend.click_element(&need_id(args)?)?;
+            json!("ok")
+        }
+        "focus_element" => {
+            backend.focus_element(&need_id(args)?)?;
+            json!("ok")
+        }
+        "toggle_element" => {
+            backend.toggle_element(&need_id(args)?)?;
+            json!("ok")
+        }
+        "expand_element" => {
+            backend.expand_element(&need_id(args)?)?;
+            json!("ok")
+        }
+        "collapse_element" => {
+            backend.collapse_element(&need_id(args)?)?;
+            json!("ok")
+        }
+        "select_element" => {
+            backend.select_element(&need_id(args)?)?;
+            json!("ok")
+        }
+        "scroll_into_view" => {
+            backend.scroll_into_view(&need_id(args)?)?;
+            json!("ok")
+        }
 
         "set_text" => {
             let text = need_str(args, "text")?;
@@ -189,7 +222,8 @@ fn call_tool(backend: &Arc<dyn UiBackend>, name: &str, args: &Value) -> Result<S
         }
 
         "set_range" => {
-            let value = args["value"].as_f64()
+            let value = args["value"]
+                .as_f64()
                 .ok_or_else(|| anyhow::anyhow!("missing 'value'"))?;
             backend.set_range(&need_id(args)?, value)?;
             json!("ok")
@@ -202,8 +236,14 @@ fn call_tool(backend: &Arc<dyn UiBackend>, name: &str, args: &Value) -> Result<S
         }
 
         // ── Window operations ─────────────────────────────────────────────────
-        "focus_window" => { backend.focus_window(need_pid(args)?)?; json!("ok") }
-        "close_window" => { backend.close_window(need_pid(args)?)?; json!("ok") }
+        "focus_window" => {
+            backend.focus_window(need_pid(args)?)?;
+            json!("ok")
+        }
+        "close_window" => {
+            backend.close_window(need_pid(args)?)?;
+            json!("ok")
+        }
 
         other => return Err(anyhow::anyhow!("Unknown tool: {other}")),
     };
@@ -214,22 +254,30 @@ fn call_tool(backend: &Arc<dyn UiBackend>, name: &str, args: &Value) -> Result<S
 // ── Argument helpers ──────────────────────────────────────────────────────────
 
 fn need_id(args: &Value) -> Result<String> {
-    args["id"].as_str().map(String::from)
+    args["id"]
+        .as_str()
+        .map(String::from)
         .ok_or_else(|| anyhow::anyhow!("missing required argument 'id'"))
 }
 
 fn need_pid(args: &Value) -> Result<u32> {
-    args["pid"].as_u64().map(|n| n as u32)
+    args["pid"]
+        .as_u64()
+        .map(|n| n as u32)
         .ok_or_else(|| anyhow::anyhow!("missing required argument 'pid'"))
 }
 
 fn need_hwnd(args: &Value) -> Result<usize> {
-    args["hwnd"].as_u64().map(|n| n as usize)
+    args["hwnd"]
+        .as_u64()
+        .map(|n| n as usize)
         .ok_or_else(|| anyhow::anyhow!("missing required argument 'hwnd'"))
 }
 
 fn need_str(args: &Value, key: &str) -> Result<String> {
-    args[key].as_str().map(String::from)
+    args[key]
+        .as_str()
+        .map(String::from)
         .ok_or_else(|| anyhow::anyhow!("missing required argument '{key}'"))
 }
 

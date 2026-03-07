@@ -19,7 +19,10 @@ pub async fn list_windows(
     State(state): State<AppState>,
 ) -> Result<Json<ApiResponse<Vec<WindowInfo>>>, Err> {
     let b = state.backend.clone();
-    let r = task::spawn_blocking(move || b.list_windows()).await.map_err(e)?.map_err(e)?;
+    let r = task::spawn_blocking(move || b.list_windows())
+        .await
+        .map_err(e)?
+        .map_err(e)?;
     Ok(Json(ApiResponse::ok(r)))
 }
 
@@ -29,7 +32,10 @@ pub async fn get_tree_hwnd(
     Path(hwnd): Path<usize>,
 ) -> Result<Json<ApiResponse<UiElement>>, Err> {
     let b = state.backend.clone();
-    let r = task::spawn_blocking(move || b.get_ui_tree_hwnd(hwnd)).await.map_err(e)?.map_err(e)?;
+    let r = task::spawn_blocking(move || b.get_ui_tree_hwnd(hwnd))
+        .await
+        .map_err(e)?
+        .map_err(e)?;
     Ok(Json(ApiResponse::ok(r)))
 }
 
@@ -58,7 +64,10 @@ pub async fn get_tree(
     Path(pid): Path<u32>,
 ) -> Result<Json<ApiResponse<UiElement>>, Err> {
     let b = state.backend.clone();
-    let r = task::spawn_blocking(move || b.get_ui_tree(pid)).await.map_err(e)?.map_err(e)?;
+    let r = task::spawn_blocking(move || b.get_ui_tree(pid))
+        .await
+        .map_err(e)?
+        .map_err(e)?;
     Ok(Json(ApiResponse::ok(r)))
 }
 
@@ -104,7 +113,10 @@ pub async fn focus_window(
     Path(pid): Path<u32>,
 ) -> Result<Json<ApiResponse<()>>, Err> {
     let b = state.backend.clone();
-    task::spawn_blocking(move || b.focus_window(pid)).await.map_err(e)?.map_err(e)?;
+    task::spawn_blocking(move || b.focus_window(pid))
+        .await
+        .map_err(e)?
+        .map_err(e)?;
     Ok(Json(ApiResponse::ok(())))
 }
 
@@ -114,7 +126,10 @@ pub async fn close_window(
     Path(pid): Path<u32>,
 ) -> Result<Json<ApiResponse<()>>, Err> {
     let b = state.backend.clone();
-    task::spawn_blocking(move || b.close_window(pid)).await.map_err(e)?.map_err(e)?;
+    task::spawn_blocking(move || b.close_window(pid))
+        .await
+        .map_err(e)?
+        .map_err(e)?;
     Ok(Json(ApiResponse::ok(())))
 }
 
@@ -210,4 +225,3 @@ fn e(err: impl ToString) -> Err {
     };
     (status, Json(ApiResponse::err(msg)))
 }
-

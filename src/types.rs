@@ -191,42 +191,44 @@ pub struct HighlightPayload {
     pub duration_ms: u64,
 }
 
-fn default_highlight_duration() -> u64 { 2000 }
+fn default_highlight_duration() -> u64 {
+    2000
+}
 
 // ── ElementType helpers ───────────────────────────────────────────────────────
 
 impl From<&str> for ElementType {
     fn from(s: &str) -> Self {
         match s {
-            "Button"       => ElementType::Button,
-            "Edit"         => ElementType::Edit,
-            "Text"         => ElementType::Text,
-            "CheckBox"     => ElementType::CheckBox,
-            "RadioButton"  => ElementType::RadioButton,
-            "ComboBox"     => ElementType::ComboBox,
-            "ListBox"      => ElementType::ListBox,
-            "ListItem"     => ElementType::ListItem,
-            "TreeItem"     => ElementType::TreeItem,
-            "Menu"         => ElementType::Menu,
-            "MenuItem"     => ElementType::MenuItem,
-            "TabItem"      => ElementType::TabItem,
-            "ToolBar"      => ElementType::ToolBar,
-            "StatusBar"    => ElementType::StatusBar,
-            "ScrollBar"    => ElementType::ScrollBar,
-            "Slider"       => ElementType::Slider,
-            "ProgressBar"  => ElementType::ProgressBar,
-            "Image"        => ElementType::Image,
-            "Link"         => ElementType::Link,
-            "Group"        => ElementType::Group,
-            "Pane"         => ElementType::Pane,
-            "Dialog"       => ElementType::Dialog,
-            "Document"     => ElementType::Document,
-            "DataGrid"     => ElementType::DataGrid,
-            "DataItem"     => ElementType::DataItem,
-            "Table"        => ElementType::Table,
-            "Window"       => ElementType::Window,
-            "Custom"       => ElementType::Custom,
-            _              => ElementType::Unknown,
+            "Button" => ElementType::Button,
+            "Edit" => ElementType::Edit,
+            "Text" => ElementType::Text,
+            "CheckBox" => ElementType::CheckBox,
+            "RadioButton" => ElementType::RadioButton,
+            "ComboBox" => ElementType::ComboBox,
+            "ListBox" => ElementType::ListBox,
+            "ListItem" => ElementType::ListItem,
+            "TreeItem" => ElementType::TreeItem,
+            "Menu" => ElementType::Menu,
+            "MenuItem" => ElementType::MenuItem,
+            "TabItem" => ElementType::TabItem,
+            "ToolBar" => ElementType::ToolBar,
+            "StatusBar" => ElementType::StatusBar,
+            "ScrollBar" => ElementType::ScrollBar,
+            "Slider" => ElementType::Slider,
+            "ProgressBar" => ElementType::ProgressBar,
+            "Image" => ElementType::Image,
+            "Link" => ElementType::Link,
+            "Group" => ElementType::Group,
+            "Pane" => ElementType::Pane,
+            "Dialog" => ElementType::Dialog,
+            "Document" => ElementType::Document,
+            "DataGrid" => ElementType::DataGrid,
+            "DataItem" => ElementType::DataItem,
+            "Table" => ElementType::Table,
+            "Window" => ElementType::Window,
+            "Custom" => ElementType::Custom,
+            _ => ElementType::Unknown,
         }
     }
 }
@@ -242,12 +244,20 @@ pub struct ApiResponse<T: Serialize> {
 
 impl<T: Serialize> ApiResponse<T> {
     pub fn ok(data: T) -> Self {
-        Self { success: true, data: Some(data), error: None }
+        Self {
+            success: true,
+            data: Some(data),
+            error: None,
+        }
     }
 }
 
 impl ApiResponse<()> {
     pub fn err(msg: impl Into<String>) -> Self {
-        Self { success: false, data: None, error: Some(msg.into()) }
+        Self {
+            success: false,
+            data: None,
+            error: Some(msg.into()),
+        }
     }
 }

@@ -1,5 +1,5 @@
-use anyhow::Result;
 use crate::types::{ElementType, Rect, UiElement, WindowInfo};
+use anyhow::Result;
 
 /// Cross-platform UI automation backend.
 ///
