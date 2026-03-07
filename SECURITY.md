@@ -11,7 +11,7 @@
 If you discover a security vulnerability in OculOS, please report it responsibly:
 
 1. **Do NOT open a public issue.**
-2. Email **huseyinstif@gmail.com** with:
+2. Email **mail@huseyintintas.com** with:
    - Description of the vulnerability
    - Steps to reproduce
    - Potential impact
