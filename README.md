@@ -37,6 +37,14 @@ No screenshots. No pixel coordinates. No browser extensions. No code injection. 
 
 ---
 
+### Demo — Claude Code + OculOS → Calculator (5×5=25)
+
+<p align="center">
+  <img src="static/demo.gif" width="720" alt="Claude Code using OculOS MCP to open Calculator and compute 5×5" />
+</p>
+
+<sub>Claude Code uses OculOS MCP tools to open Calculator, find buttons, click 5 × 5 =, and read the result — fully autonomous.</sub>
+
 ### Claude Code + OculOS → Spotify
 
 <p align="center">
