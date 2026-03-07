@@ -5,8 +5,12 @@ Python SDK for [OculOS](https://github.com/huseyinstif/oculos) — control any d
 ## Install
 
 ```bash
-pip install oculos-sdk
+# From the repo root:
+cd sdk/python
+pip install .
 ```
+
+> PyPI package (`pip install oculos-sdk`) coming soon.
 
 ## Quick Start
 

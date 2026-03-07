@@ -5,8 +5,13 @@ TypeScript SDK for [OculOS](https://github.com/huseyinstif/oculos) — control a
 ## Install
 
 ```bash
-npm install oculos-sdk
+# From the repo root:
+cd sdk/typescript
+npm install
+npm run build
 ```
+
+> npm package (`npm install oculos-sdk`) coming soon.
 
 ## Quick Start
 

@@ -230,12 +230,13 @@ Built-in web UI at `http://127.0.0.1:7878`:
 
 ## Client SDKs
 
-Official wrappers for the REST API:
+Official wrappers for the REST API. Install from source (PyPI/npm packages coming soon):
 
 ### Python
 
 ```bash
-pip install oculos-sdk
+cd sdk/python
+pip install .
 ```
 
 ```python
@@ -252,11 +253,13 @@ See [`sdk/python`](./sdk/python) for full docs.
 ### TypeScript
 
 ```bash
-npm install oculos-sdk
+cd sdk/typescript
+npm install
+npm run build
 ```
 
 ```typescript
-import { OculOS } from "oculos-sdk";
+import { OculOS } from "./sdk/typescript/src/index";
 
 const client = new OculOS();
 const windows = await client.listWindows();
