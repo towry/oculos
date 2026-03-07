@@ -13,6 +13,7 @@
   <a href="#quick-start">Quick Start</a> •
   <a href="#how-it-works">How It Works</a> •
   <a href="#api">API</a> •
+  <a href="#client-sdks">SDKs</a> •
   <a href="#mcp-setup">MCP Setup</a> •
   <a href="#dashboard">Dashboard</a> •
   <a href="./AGENTS.md">Agent Prompt</a> •
@@ -28,9 +29,9 @@
 
 ---
 
-OculOS is a lightweight daemon that reads the OS accessibility tree and exposes every button, text field, checkbox, and menu item as a JSON endpoint. It works as a **REST API** for scripts and as an **MCP server** for AI agents — Claude, GPT, Gemini, or your own model.
+OculOS is a lightweight daemon that reads the OS accessibility tree and exposes every button, text field, checkbox, and menu item as a JSON endpoint. It works as a **REST API** for scripts, testing, and CI/CD — and as an **MCP server** for AI agents like Claude, Cursor, and Windsurf.
 
-No screenshots. No pixel coordinates. No browser extensions. No code injection. Just structured JSON.
+No screenshots. No pixel coordinates. No browser extensions. No code injection. No AI required. Just structured JSON.
 
 ---
 
@@ -213,6 +214,58 @@ Built-in web UI at `http://127.0.0.1:7878`:
 | **Linux** | AT-SPI2 (`atspi` + `zbus`) | ✅ Working — GTK, Qt, Electron |
 | **macOS** | Accessibility API (`AXUIElement` + CoreGraphics) | ✅ Working — Cocoa, Electron, Qt |
 
+### App Compatibility
+
+| App type | Coverage | Notes |
+|----------|----------|-------|
+| **Win32 / WPF / WinForms** | Excellent | Full deep tree, all interactions |
+| **GTK / Qt** | Excellent | Full tree on all platforms |
+| **Electron** (Spotify, VS Code, Slack, Chrome) | Good | Key interactive elements exposed; tree is shallower than native |
+| **Cocoa** (macOS native) | Good | Standard controls fully exposed |
+| **Custom-drawn / OpenGL / DirectX** | Poor | Minimal or no accessibility tree — games, CAD, etc. |
+
+> **Tip:** Run `curl "localhost:7878/windows/{pid}/find?interactive=true"` to see what's available for any app.
+
+---
+
+## Client SDKs
+
+Official wrappers for the REST API:
+
+### Python
+
+```bash
+pip install oculos-sdk
+```
+
+```python
+from oculos import OculOS
+
+client = OculOS()
+windows = client.list_windows()
+client.click(element_id)
+client.set_text(element_id, "hello world")
+```
+
+See [`sdk/python`](./sdk/python) for full docs.
+
+### TypeScript
+
+```bash
+npm install oculos-sdk
+```
+
+```typescript
+import { OculOS } from "oculos-sdk";
+
+const client = new OculOS();
+const windows = await client.listWindows();
+await client.click(elementId);
+await client.setText(elementId, "hello world");
+```
+
+See [`sdk/typescript`](./sdk/typescript) for full docs.
+
 ---
 
 ## CLI
@@ -270,7 +323,7 @@ oculos [OPTIONS]
 
 ### Planned
 - [ ] macOS element highlighting (native overlay)
-- [ ] Python & TypeScript client SDKs
+- [x] Python & TypeScript client SDKs
 - [ ] Batch operations (multiple interactions per request)
 - [ ] Conditional waits (wait for element to appear)
 - [ ] Element caching & diffing (change detection)
@@ -283,9 +336,10 @@ oculos [OPTIONS]
 We welcome contributions! See [CONTRIBUTING.md](./CONTRIBUTING.md) for details.
 
 **Top areas:**
-- **macOS backend** — `AXUIElement` implementation
-- **Client SDKs** — Python, TypeScript wrappers
 - **Tests** — cross-app integration tests
+- **macOS highlight** — native overlay for element highlighting
+- **Batch operations** — multiple interactions per request
+- **Documentation** — guides, examples, tutorials
 
 ---
 

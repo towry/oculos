@@ -1,0 +1,25 @@
+{
+  "name": "oculos-sdk",
+  "version": "0.1.0",
+  "description": "TypeScript SDK for OculOS — control any desktop app through JSON",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "type": "module",
+  "scripts": {
+    "build": "tsc",
+    "prepublishOnly": "tsc"
+  },
+  "keywords": ["ui-automation", "accessibility", "desktop", "api", "mcp", "oculos"],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/huseyinstif/oculos",
+    "directory": "sdk/typescript"
+  },
+  "devDependencies": {
+    "typescript": "^5.0.0"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
