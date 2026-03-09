@@ -5,6 +5,7 @@ pub mod ws;
 use crate::platform::UiBackend;
 use crate::types::ApiResponse;
 use axum::{
+    http::StatusCode,
     routing::{get, post},
     Json, Router,
 };
@@ -60,6 +61,7 @@ pub fn router(state: AppState) -> Router {
         .route("/interact/batch", post(interact::batch))
         // ── Health ─────────────────────────────────────────────────────────
         .route("/health", get(health))
+        .route("/v1/actions", get(compatibility_health))
         // ── WebSocket ─────────────────────────────────────────────────────
         .route("/ws", get(ws::ws_handler))
         .with_state(state)
@@ -90,4 +92,8 @@ async fn health() -> Json<ApiResponse<HealthInfo>> {
         arch: std::env::consts::ARCH,
         uptime_secs: START_TIME.elapsed().as_secs(),
     }))
+}
+
+pub async fn compatibility_health() -> StatusCode {
+    StatusCode::OK
 }

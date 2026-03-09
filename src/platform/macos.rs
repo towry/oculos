@@ -1,16 +1,23 @@
 use anyhow::{anyhow, Context, Result};
+use accessibility_sys::{
+    kAXErrorAPIDisabled, kAXValueTypeCGPoint, kAXValueTypeCGSize, AXValueGetType,
+    AXValueGetTypeID, AXValueGetValue, AXValueRef,
+};
 use dashmap::DashMap;
-use std::sync::Arc;
+use std::{collections::HashSet, sync::Arc};
 use uuid::Uuid;
 
-use accessibility::{AXAttribute, AXUIElement, TreeVisitor};
+use accessibility::{AXAttribute, AXUIElement};
 use core_foundation::{
     array::CFArray,
     base::{CFType, TCFType},
     boolean::CFBoolean,
+    dictionary::CFDictionary,
     number::CFNumber,
     string::CFString,
 };
+use core_graphics::geometry::{CGPoint, CGSize};
+use foreign_types::ForeignType;
 
 use crate::{
     platform::UiBackend,
@@ -38,11 +45,19 @@ impl MacOsUiBackend {
         extern "C" {
             fn AXIsProcessTrustedWithOptions(options: core_foundation::base::CFTypeRef) -> bool;
         }
-        let trusted = unsafe { AXIsProcessTrustedWithOptions(std::ptr::null()) };
+        let options = CFDictionary::from_CFType_pairs(&[(
+            CFString::new("AXTrustedCheckOptionPrompt").as_CFType(),
+            CFBoolean::true_value().as_CFType(),
+        )]);
+        let trusted = unsafe {
+            AXIsProcessTrustedWithOptions(options.as_concrete_TypeRef() as *const std::ffi::c_void)
+        };
         if !trusted {
             tracing::warn!(
                 "Accessibility permission not granted. \
-                 Go to System Settings → Privacy & Security → Accessibility and enable OculOS."
+                 Go to System Settings → Privacy & Security → Accessibility and enable \
+                 the executable that launched OculOS (the shell/wrapper entry may appear \
+                 instead of 'oculos-local')."
             );
         }
         Ok(Self {
@@ -69,6 +84,40 @@ impl MacOsUiBackend {
             })
     }
 
+    fn get_element_attr(element: &AXUIElement, attr: &str) -> Option<AXUIElement> {
+        element
+            .attribute(&AXAttribute::new(&CFString::new(attr)))
+            .ok()
+            .and_then(|v| v.downcast::<AXUIElement>())
+    }
+
+    fn get_element_array_attr(element: &AXUIElement, attr: &str) -> Vec<AXUIElement> {
+        element
+            .attribute(&AXAttribute::new(&CFString::new(attr)))
+            .ok()
+            .and_then(|v| v.downcast::<CFArray>())
+            .map(|arr| {
+                arr.get_all_values()
+                    .into_iter()
+                    .map(|item| unsafe { AXUIElement::wrap_under_get_rule(item as _) })
+                    .collect()
+            })
+            .unwrap_or_default()
+    }
+
+    fn push_unique_element(
+        elements: &mut Vec<AXUIElement>,
+        seen: &mut HashSet<usize>,
+        candidate: Option<AXUIElement>,
+    ) {
+        if let Some(element) = candidate {
+            let key = element.as_CFTypeRef() as usize;
+            if seen.insert(key) {
+                elements.push(element);
+            }
+        }
+    }
+
     fn get_number_attr(element: &AXUIElement, attr: &str) -> Option<f64> {
         element
             .attribute(&AXAttribute::new(&CFString::new(attr)))
@@ -77,15 +126,59 @@ impl MacOsUiBackend {
     }
 
     fn get_children(element: &AXUIElement) -> Vec<AXUIElement> {
-        element
-            .attribute(&AXAttribute::children())
-            .ok()
-            .map(|arr| {
-                (0..arr.len())
-                    .filter_map(|i| arr.get(i).map(|item| (*item).clone()))
-                    .collect()
-            })
-            .unwrap_or_default()
+        let mut children = Vec::new();
+        let mut seen = HashSet::new();
+
+        for child in Self::get_element_array_attr(element, "AXVisibleChildren") {
+            Self::push_unique_element(&mut children, &mut seen, Some(child));
+        }
+        for child in Self::get_element_array_attr(element, "AXChildren") {
+            Self::push_unique_element(&mut children, &mut seen, Some(child));
+        }
+        Self::push_unique_element(
+            &mut children,
+            &mut seen,
+            Self::get_element_attr(element, "AXContents"),
+        );
+
+        children
+    }
+
+    fn first_string_attr(element: &AXUIElement, attrs: &[&str]) -> Option<String> {
+        attrs
+            .iter()
+            .find_map(|attr| Self::get_string_attr(element, attr))
+            .filter(|value| !value.trim().is_empty())
+    }
+
+    fn get_text_content(element: &AXUIElement, role: &str) -> Option<String> {
+        Self::first_string_attr(
+            element,
+            &[
+                "AXValue",
+                "AXPlaceholderValue",
+                "AXDescription",
+                "AXTitle",
+                "AXLabel",
+                "AXHelp",
+                "AXURL",
+            ],
+        )
+        .filter(|value| role == "AXWebArea" || value.len() <= 2048)
+    }
+
+    fn is_likely_text_input(role: &str, subrole: Option<&str>) -> bool {
+        matches!(
+            role,
+            "AXTextField" | "AXTextArea" | "AXSecureTextField" | "AXComboBox"
+        ) || matches!(subrole, Some("AXSearchField" | "AXTextArea"))
+    }
+
+    fn is_likely_scrollable(role: &str) -> bool {
+        matches!(
+            role,
+            "AXScrollArea" | "AXWebArea" | "AXTable" | "AXList" | "AXOutline"
+        )
     }
 
     // ── Role → ElementType mapping ────────────────────────────────────────
@@ -151,9 +244,11 @@ impl MacOsUiBackend {
             }
         }
 
+        let role = Self::get_string_attr(element, "AXRole").unwrap_or_default();
+        let subrole = Self::get_string_attr(element, "AXSubrole");
+
         // Check if element is settable (for set-text)
         if Self::get_bool_attr(element, "AXSettable:AXValue").unwrap_or(false) {
-            let role = Self::get_string_attr(element, "AXRole").unwrap_or_default();
             match role.as_str() {
                 "AXTextField" | "AXTextArea" | "AXSecureTextField" | "AXComboBox" => {
                     actions.push("set-text".into());
@@ -169,6 +264,19 @@ impl MacOsUiBackend {
                 }
                 _ => {}
             }
+        }
+
+        if Self::is_likely_text_input(&role, subrole.as_deref()) {
+            if !actions.iter().any(|action| action == "set-text") {
+                actions.push("set-text".into());
+            }
+            if !actions.iter().any(|action| action == "send-keys") {
+                actions.push("send-keys".into());
+            }
+        }
+
+        if Self::is_likely_scrollable(&role) && !actions.iter().any(|action| action == "scroll") {
+            actions.push("scroll".into());
         }
 
         // Focus
@@ -222,12 +330,25 @@ impl MacOsUiBackend {
         let role = Self::get_string_attr(element, "AXRole").unwrap_or_default();
         let element_type = Self::role_to_element_type(&role);
 
-        let label = Self::get_string_attr(element, "AXTitle")
-            .or_else(|| Self::get_string_attr(element, "AXDescription"))
-            .or_else(|| Self::get_string_attr(element, "AXLabel"))
-            .unwrap_or_default();
+        let subrole = Self::get_string_attr(element, "AXSubrole");
+        let role_description = Self::get_string_attr(element, "AXRoleDescription");
 
-        let value = Self::get_string_attr(element, "AXValue");
+        let label = Self::first_string_attr(
+            element,
+            &[
+                "AXTitle",
+                "AXDescription",
+                "AXLabel",
+                "AXHelp",
+                "AXPlaceholderValue",
+                "AXIdentifier",
+                "AXRoleDescription",
+            ],
+        )
+        .unwrap_or_default();
+
+        let value = Self::first_string_attr(element, &["AXValue", "AXURL"]);
+        let text_content = Self::get_text_content(element, &role);
 
         let enabled = Self::get_bool_attr(element, "AXEnabled").unwrap_or(true);
         let focused = Self::get_bool_attr(element, "AXFocused").unwrap_or(false);
@@ -283,9 +404,9 @@ impl MacOsUiBackend {
             None
         };
 
-        let automation_id = Self::get_string_attr(element, "AXIdentifier");
+        let automation_id = Self::first_string_attr(element, &["AXIdentifier", "AXDOMIdentifier"]);
         let help_text = Self::get_string_attr(element, "AXHelp");
-        let class_name = Self::get_string_attr(element, "AXSubrole");
+        let class_name = subrole.or(role_description);
 
         let actions = Self::collect_actions(element);
 
@@ -308,7 +429,7 @@ impl MacOsUiBackend {
             element_type,
             label,
             value,
-            text_content: None,
+            text_content,
             rect,
             enabled,
             focused,
@@ -329,37 +450,122 @@ impl MacOsUiBackend {
     // ── Position / Size helpers ───────────────────────────────────────────
 
     fn get_position(element: &AXUIElement) -> (i32, i32) {
-        element
+        let Some(value) = element
             .attribute(&AXAttribute::new(&CFString::new("AXPosition")))
             .ok()
-            .map(|v| {
-                // AXPosition returns an AXValue of type CGPoint
-                // We extract x, y from the CFType
-                let desc = format!("{:?}", v);
-                // Parse "x:NNN y:NNN" from debug repr as fallback
-                let x = Self::get_number_attr(element, "AXPosition.x").unwrap_or(0.0) as i32;
-                let y = Self::get_number_attr(element, "AXPosition.y").unwrap_or(0.0) as i32;
-                (x, y)
-            })
-            .unwrap_or((0, 0))
+        else {
+            return (0, 0);
+        };
+
+        if unsafe { core_foundation::base::CFGetTypeID(value.as_CFTypeRef()) } != unsafe {
+            AXValueGetTypeID()
+        } {
+            return (0, 0);
+        }
+
+        let ax_value = value.as_CFTypeRef() as AXValueRef;
+        if unsafe { AXValueGetType(ax_value) } != kAXValueTypeCGPoint {
+            return (0, 0);
+        }
+
+        let mut point = CGPoint::new(0.0, 0.0);
+        if unsafe {
+            AXValueGetValue(
+                ax_value,
+                kAXValueTypeCGPoint,
+                &mut point as *mut CGPoint as *mut std::ffi::c_void,
+            )
+        } {
+            (point.x as i32, point.y as i32)
+        } else {
+            (0, 0)
+        }
     }
 
     fn get_size(element: &AXUIElement) -> (i32, i32) {
-        element
-            .attribute(&AXAttribute::new(&CFString::new("AXSize")))
-            .ok()
-            .map(|_| {
-                let w = Self::get_number_attr(element, "AXSize.w").unwrap_or(0.0) as i32;
-                let h = Self::get_number_attr(element, "AXSize.h").unwrap_or(0.0) as i32;
-                (w, h)
-            })
-            .unwrap_or((0, 0))
+        let Some(value) = element.attribute(&AXAttribute::new(&CFString::new("AXSize"))).ok()
+        else {
+            return (0, 0);
+        };
+
+        if unsafe { core_foundation::base::CFGetTypeID(value.as_CFTypeRef()) } != unsafe {
+            AXValueGetTypeID()
+        } {
+            return (0, 0);
+        }
+
+        let ax_value = value.as_CFTypeRef() as AXValueRef;
+        if unsafe { AXValueGetType(ax_value) } != kAXValueTypeCGSize {
+            return (0, 0);
+        }
+
+        let mut size = CGSize::new(0.0, 0.0);
+        if unsafe {
+            AXValueGetValue(
+                ax_value,
+                kAXValueTypeCGSize,
+                &mut size as *mut CGSize as *mut std::ffi::c_void,
+            )
+        } {
+            (size.width as i32, size.height as i32)
+        } else {
+            (0, 0)
+        }
     }
 
     // ── Get app element for PID ───────────────────────────────────────────
 
     fn app_element(pid: u32) -> AXUIElement {
         AXUIElement::application(pid as i32)
+    }
+
+    fn ensure_accessibility_ready(&self, pid: u32, app: &AXUIElement) -> Result<()> {
+        app.attribute_names().map(|_| ()).map_err(|err| {
+            if err == kAXErrorAPIDisabled {
+                anyhow!(
+                "Accessibility API disabled for PID {}. Grant Accessibility to the executable \
+                 that launched OculOS; on macOS this may appear as your shell or wrapper rather \
+                 than 'oculos-local'.",
+                pid
+            )
+            } else {
+                anyhow!(
+                    "Failed to access macOS accessibility tree for PID {} (AXError {}).",
+                    pid,
+                    err
+                )
+            }
+        })
+    }
+
+    fn window_roots(app: &AXUIElement) -> Vec<AXUIElement> {
+        let mut roots = Vec::new();
+        let mut seen = HashSet::new();
+
+        Self::push_unique_element(
+            &mut roots,
+            &mut seen,
+            Self::get_element_attr(app, "AXFocusedWindow"),
+        );
+        Self::push_unique_element(
+            &mut roots,
+            &mut seen,
+            Self::get_element_attr(app, "AXMainWindow"),
+        );
+        for window in Self::get_element_array_attr(app, "AXWindows") {
+            Self::push_unique_element(&mut roots, &mut seen, Some(window));
+        }
+
+        if roots.is_empty() {
+            for child in Self::get_children(app) {
+                let role = Self::get_string_attr(&child, "AXRole").unwrap_or_default();
+                if matches!(role.as_str(), "AXWindow" | "AXSheet" | "AXDialog") {
+                    Self::push_unique_element(&mut roots, &mut seen, Some(child));
+                }
+            }
+        }
+
+        roots
     }
 
     // ── Registry lookup ───────────────────────────────────────────────────
@@ -395,12 +601,38 @@ impl MacOsUiBackend {
 
             if let Some(ref q) = query_lower {
                 let label_match = elem.label.to_lowercase().contains(q.as_str());
+                let value_match = elem
+                    .value
+                    .as_ref()
+                    .map(|value| value.to_lowercase().contains(q.as_str()))
+                    .unwrap_or(false);
+                let text_match = elem
+                    .text_content
+                    .as_ref()
+                    .map(|text| text.to_lowercase().contains(q.as_str()))
+                    .unwrap_or(false);
+                let help_match = elem
+                    .help_text
+                    .as_ref()
+                    .map(|text| text.to_lowercase().contains(q.as_str()))
+                    .unwrap_or(false);
+                let class_match = elem
+                    .class_name
+                    .as_ref()
+                    .map(|text| text.to_lowercase().contains(q.as_str()))
+                    .unwrap_or(false);
                 let aid_match = elem
                     .automation_id
                     .as_ref()
                     .map(|a| a.to_lowercase().contains(q.as_str()))
                     .unwrap_or(false);
-                if !label_match && !aid_match {
+                if !label_match
+                    && !aid_match
+                    && !value_match
+                    && !text_match
+                    && !help_match
+                    && !class_match
+                {
                     matches = false;
                 }
             }
@@ -438,11 +670,12 @@ impl MacOsUiBackend {
 impl UiBackend for MacOsUiBackend {
     fn list_windows(&self) -> Result<Vec<WindowInfo>> {
         use core_foundation::base::{CFTypeRef, TCFType};
+        use core_foundation::dictionary::CFDictionary;
         use core_foundation::dictionary::CFDictionaryRef;
         use core_foundation::number::CFNumber;
         use core_foundation::string::CFString;
         use core_graphics::window::{
-            kCGNullWindowID, kCGWindowLayer, kCGWindowListExcludeDesktopElements,
+            kCGNullWindowID, kCGWindowBounds, kCGWindowLayer, kCGWindowListExcludeDesktopElements,
             kCGWindowListOptionOnScreenOnly, kCGWindowName, kCGWindowNumber, kCGWindowOwnerName,
             kCGWindowOwnerPID, CGWindowListCopyWindowInfo,
         };
@@ -539,17 +772,37 @@ impl UiBackend for MacOsUiBackend {
                     0
                 };
 
+                let mut rect = Rect {
+                    x: 0,
+                    y: 0,
+                    width: 0,
+                    height: 0,
+                };
+
+                let bounds_value = get_val(kCGWindowBounds as CFTypeRef);
+                if !bounds_value.is_null() {
+                    let bounds_dict =
+                        CFDictionary::<CFString, CFType>::wrap_under_get_rule(bounds_value as _);
+                    let get_bound = |key: &str| {
+                        bounds_dict
+                            .find(&CFString::new(key))
+                            .and_then(|v| v.downcast::<CFNumber>().and_then(|n| n.to_i64()))
+                            .unwrap_or(0) as i32
+                    };
+                    rect = Rect {
+                        x: get_bound("X"),
+                        y: get_bound("Y"),
+                        width: get_bound("Width"),
+                        height: get_bound("Height"),
+                    };
+                }
+
                 windows.push(WindowInfo {
                     pid,
                     hwnd: window_number,
                     title,
                     exe_name: owner_name,
-                    rect: Rect {
-                        x: 0,
-                        y: 0,
-                        width: 0,
-                        height: 0,
-                    },
+                    rect,
                     visible: true,
                 });
             }
@@ -563,10 +816,13 @@ impl UiBackend for MacOsUiBackend {
 
     fn get_ui_tree(&self, pid: u32) -> Result<UiElement> {
         let app = Self::app_element(pid);
-        self.build_element(&app, true, 0)
+        self.ensure_accessibility_ready(pid, &app)?;
+
+        let root = Self::window_roots(&app).into_iter().next().unwrap_or(app);
+        self.build_element(&root, true, 0)
     }
 
-    fn get_ui_tree_hwnd(&self, hwnd: usize) -> Result<UiElement> {
+    fn get_ui_tree_hwnd(&self, _hwnd: usize) -> Result<UiElement> {
         // On macOS, hwnd is not used in the same way. We treat it as a window index.
         // The caller should use pid-based access instead.
         Err(anyhow!(
@@ -582,8 +838,23 @@ impl UiBackend for MacOsUiBackend {
         interactive_only: bool,
     ) -> Result<Vec<UiElement>> {
         let app = Self::app_element(pid);
+        self.ensure_accessibility_ready(pid, &app)?;
         let mut results = Vec::new();
-        self.search_elements(&app, query, element_type, interactive_only, &mut results, 0);
+        let roots = Self::window_roots(&app);
+        if roots.is_empty() {
+            self.search_elements(&app, query, element_type, interactive_only, &mut results, 0);
+        } else {
+            for root in roots {
+                self.search_elements(
+                    &root,
+                    query,
+                    element_type,
+                    interactive_only,
+                    &mut results,
+                    0,
+                );
+            }
+        }
         Ok(results)
     }
 
@@ -670,7 +941,7 @@ impl UiBackend for MacOsUiBackend {
     }
 
     fn scroll_element(&self, oculos_id: &str, direction: &str) -> Result<()> {
-        let _elem = self.find_registered(oculos_id)?;
+        let elem = self.find_registered(oculos_id)?;
 
         // macOS scrolling is done via CGEvent scroll wheel events
         let (dx, dy): (i32, i32) = match direction {
@@ -688,16 +959,28 @@ impl UiBackend for MacOsUiBackend {
             }
         };
 
-        unsafe {
-            use core_graphics::event::{CGEvent, ScrollEventUnit};
-            use core_graphics::event_source::{CGEventSource, CGEventSourceStateID};
-
-            let source = CGEventSource::new(CGEventSourceStateID::HIDSystemState)
-                .map_err(|_| anyhow!("Failed to create CGEventSource"))?;
-            let event = CGEvent::new_scroll_event(source, ScrollEventUnit::LINE, 2, dy, dx, 0)
-                .map_err(|_| anyhow!("Failed to create scroll event"))?;
-            event.post(core_graphics::event::CGEventTapLocation::HID);
+        let (x, y) = Self::get_position(&elem);
+        let (width, height) = Self::get_size(&elem);
+        if width > 0 && height > 0 {
+            let center = CGPoint::new((x + width / 2) as f64, (y + height / 2) as f64);
+            core_graphics::display::CGDisplay::warp_mouse_cursor_position(center)
+                .map_err(|_| anyhow!("Failed to move cursor to element '{}'", oculos_id))?;
+            std::thread::sleep(std::time::Duration::from_millis(40));
         }
+
+        let _ = elem.set_attribute(
+            &AXAttribute::new(&CFString::new("AXFocused")),
+            CFBoolean::true_value().as_CFType(),
+        );
+
+        use core_graphics::event::{CGEvent, ScrollEventUnit};
+        use core_graphics::event_source::{CGEventSource, CGEventSourceStateID};
+
+        let source = CGEventSource::new(CGEventSourceStateID::HIDSystemState)
+            .map_err(|_| anyhow!("Failed to create CGEventSource"))?;
+        let event = CGEvent::new_scroll_event(source, ScrollEventUnit::LINE, 2, dy, dx, 0)
+            .map_err(|_| anyhow!("Failed to create scroll event"))?;
+        event.post(core_graphics::event::CGEventTapLocation::HID);
 
         Ok(())
     }
@@ -718,6 +1001,7 @@ impl UiBackend for MacOsUiBackend {
 
     fn focus_window(&self, pid: u32) -> Result<()> {
         let app = Self::app_element(pid);
+        self.ensure_accessibility_ready(pid, &app)?;
 
         // Raise the application
         app.set_attribute(
@@ -727,7 +1011,7 @@ impl UiBackend for MacOsUiBackend {
         .map_err(|_| anyhow!("Failed to bring PID {} to foreground", pid))?;
 
         // Also try to raise the first window
-        let windows = Self::get_children(&app);
+        let windows = Self::window_roots(&app);
         if let Some(win) = windows.first() {
             let _ = win.perform_action(&CFString::new("AXRaise"));
         }
@@ -737,7 +1021,8 @@ impl UiBackend for MacOsUiBackend {
 
     fn close_window(&self, pid: u32) -> Result<()> {
         let app = Self::app_element(pid);
-        let windows = Self::get_children(&app);
+        self.ensure_accessibility_ready(pid, &app)?;
+        let windows = Self::window_roots(&app);
 
         if let Some(win) = windows.first() {
             // Find the close button
@@ -757,12 +1042,84 @@ impl UiBackend for MacOsUiBackend {
 
         Err(anyhow!("No closeable window found for PID {}", pid))
     }
+
+    fn screenshot_window(&self, pid: u32) -> Result<Vec<u8>> {
+        use core_graphics::display::CGDisplay;
+        use core_graphics::geometry::{CGPoint, CGRect, CGSize};
+        use core_graphics::window::{
+            kCGWindowImageBoundsIgnoreFraming, kCGWindowListOptionIncludingWindow,
+            CGWindowListCreateImage,
+        };
+
+        let window = self
+            .list_windows()?
+            .into_iter()
+            .find(|window| window.pid == pid && window.rect.width > 0 && window.rect.height > 0)
+            .ok_or_else(|| anyhow!("No visible window found for PID {}", pid))?;
+
+        let rect = CGRect::new(
+            &CGPoint::new(window.rect.x as f64, window.rect.y as f64),
+            &CGSize::new(window.rect.width as f64, window.rect.height as f64),
+        );
+
+        let image = unsafe {
+            CGWindowListCreateImage(
+                rect,
+                kCGWindowListOptionIncludingWindow,
+                window.hwnd as u32,
+                kCGWindowImageBoundsIgnoreFraming,
+            )
+        };
+
+        let image = if image.is_null() {
+            let display_image = CGDisplay::main()
+                .image()
+                .ok_or_else(|| anyhow!("Failed to capture window screenshot for PID {}", pid))?;
+            display_image
+        } else {
+            unsafe { core_graphics::image::CGImage::from_ptr(image) }
+        };
+
+        encode_cgimage_to_png(&image)
+    }
+}
+
+fn encode_cgimage_to_png(image: &core_graphics::image::CGImage) -> Result<Vec<u8>> {
+    let width = image.width();
+    let height = image.height();
+    let bytes_per_row = image.bytes_per_row();
+    let data = image.data();
+    let src = data.bytes();
+
+    if width == 0 || height == 0 || bytes_per_row == 0 {
+        return Err(anyhow!("Screenshot image has invalid dimensions"));
+    }
+
+    let mut pixels = vec![0u8; width * height * 4];
+    for y in 0..height {
+        let row = &src[y * bytes_per_row..y * bytes_per_row + width * 4];
+        for x in 0..width {
+            let src_idx = x * 4;
+            let dst_idx = (y * width + x) * 4;
+            pixels[dst_idx] = row[src_idx + 1];
+            pixels[dst_idx + 1] = row[src_idx + 2];
+            pixels[dst_idx + 2] = row[src_idx + 3];
+            pixels[dst_idx + 3] = row[src_idx];
+        }
+    }
+
+    let img = image::RgbaImage::from_raw(width as u32, height as u32, pixels)
+        .ok_or_else(|| anyhow!("Failed to create RGBA image buffer"))?;
+    let mut png = std::io::Cursor::new(Vec::new());
+    img.write_to(&mut png, image::ImageFormat::Png)
+        .context("Failed to encode PNG")?;
+    Ok(png.into_inner())
 }
 
 // ── macOS keyboard simulation ─────────────────────────────────────────────────
 
 fn send_key_sequence_macos(text: &str) {
-    use core_graphics::event::{CGEvent, CGKeyCode};
+    use core_graphics::event::CGEvent;
     use core_graphics::event_source::{CGEventSource, CGEventSourceStateID};
 
     let source = match CGEventSource::new(CGEventSourceStateID::HIDSystemState) {

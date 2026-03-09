@@ -1988,6 +1988,7 @@ name = "oculos"
 version = "0.1.0"
 dependencies = [
  "accessibility",
+ "accessibility-sys",
  "anyhow",
  "atspi",
  "axum",
@@ -1995,6 +1996,7 @@ dependencies = [
  "core-foundation 0.9.4",
  "core-graphics",
  "dashmap",
+ "foreign-types 0.5.0",
  "image",
  "objc2",
  "once_cell",
